@@ -1,0 +1,521 @@
+/* popup.css — Tema: Toska + Pink, animated gradient, modern responsive UI */
+
+/* ===========================
+   Variables
+   =========================== */
+:root {
+  --bg: #fdfdfd;
+  --fg: #071014;
+  --toska: #14b8a6; /* hijau toska */
+  --pink: #f472b6; /* pink */
+  --accent-grad: linear-gradient(90deg, var(--toska), var(--pink));
+  --accent-grad-soft: linear-gradient(
+    135deg,
+    rgba(20, 184, 166, 0.14),
+    rgba(244, 114, 182, 0.12)
+  );
+  --accent-glow: rgba(20, 184, 166, 0.18);
+  --danger: #e63946;
+  --success: #2a9d8f;
+  --shadow-color: rgba(7, 16, 20, 0.1);
+  --shadow: 6px 6px 0 var(--shadow-color);
+  --font:
+    "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Courier New",
+    monospace;
+  --radius: 12px;
+  --gradient-duration: 6.2s;
+  --glass: rgba(255, 255, 255, 0.6);
+}
+
+/* Dark mode overrides */
+body.dark {
+  --bg: #071014;
+  --fg: #f3f6f5;
+  --toska: #0fb69b;
+  --pink: #ff8bb9;
+  --accent-grad: linear-gradient(90deg, var(--toska), var(--pink));
+  --accent-grad-soft: linear-gradient(
+    135deg,
+    rgba(15, 182, 155, 0.12),
+    rgba(255, 139, 185, 0.1)
+  );
+  --accent-glow: rgba(15, 182, 155, 0.14);
+  --shadow-color: rgba(0, 0, 0, 0.45);
+  --glass: rgba(12, 17, 18, 0.6);
+}
+
+/* ===========================
+   Animated gradient keyframes
+   =========================== */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* subtle shine */
+@keyframes shine {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ===========================
+   Base / Utilities
+   =========================== */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 300px;
+  max-width: 420px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* transitions — reduce for motion sensitive users via media query */
+* {
+  transition: all 0.18s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* utility */
+.hidden {
+  display: none !important;
+}
+
+/* ===========================
+   Header
+   =========================== */
+.header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background: var(--accent-grad);
+  background-size: 200% 200%;
+  animation: gradientShift var(--gradient-duration) ease-in-out infinite;
+  box-shadow: var(--shadow);
+  color: var(--fg);
+}
+
+/* logo area with subtle glass + gradient border */
+.logo-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  padding: 6px;
+  display: inline-grid;
+  place-items: center;
+  background-image: linear-gradient(var(--bg), var(--bg)), var(--accent-grad);
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  border: 3px solid transparent;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: var(--fg);
+  font-weight: 900;
+  line-height: 1;
+  transform: translateZ(0);
+}
+/* multiply mask for better compatibility (silhouette effect) */
+.logo-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  color: inherit;
+}
+
+/* text */
+.logo-text {
+  font-weight: 800;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+/* dark-toggle */
+.dark-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 6px 10px;
+  border: 2px solid rgba(0, 0, 0, 0.06);
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+.dark-toggle:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* ===========================
+   Main / Card
+   =========================== */
+.main {
+  padding: 14px;
+}
+
+.card {
+  position: relative;
+  padding: 18px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  background: var(--bg);
+  /* dual-background trick to show gradient border */
+  border: 3px solid transparent;
+  background-image:
+    linear-gradient(var(--bg), var(--bg)), var(--accent-grad-soft);
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  box-shadow: 0 6px 18px rgba(12, 17, 18, 0.06);
+  overflow: hidden;
+}
+
+/* soft animated shine overlay */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.04) 40%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: shine 3.4s linear infinite;
+  mix-blend-mode: overlay;
+}
+
+/* card title */
+.card-title {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--fg);
+}
+
+/* ===========================
+   Badge (paket) — uses accent-grad
+   =========================== */
+.badges {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.badge-package {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  background: var(--accent-grad);
+  background-size: 200% 200%;
+  animation: gradientShift calc(var(--gradient-duration) * 0.9) ease-in-out
+    infinite;
+  color: #071014;
+  box-shadow: 0 4px 14px rgba(11, 18, 16, 0.06);
+  border: 2px solid rgba(0, 0, 0, 0.05);
+  transform: translateZ(0);
+}
+
+/* ===========================
+   Status blink
+   =========================== */
+.status-blink {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--fg);
+  margin-bottom: 14px;
+  animation: blinkText 1.2s infinite;
+}
+.status-blink a {
+  color: inherit;
+  text-decoration: underline;
+}
+@keyframes blinkText {
+  0%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+  50% {
+    opacity: 0.45;
+    transform: translateY(-1px);
+  }
+}
+
+/* ===========================
+   Buttons (primary uses accent-grad)
+   =========================== */
+.btn-success {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-weight: 900;
+  font-size: 1rem;
+  color: #071014;
+  cursor: pointer;
+  border: 2px solid rgba(0, 0, 0, 0.06);
+  background: var(--accent-grad);
+  background-size: 300% 300%;
+  animation: gradientShift var(--gradient-duration) linear infinite;
+  box-shadow: 0 10px 30px rgba(11, 18, 16, 0.06);
+  text-align: center;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease;
+}
+.btn-success:hover {
+  transform: translateY(-4px);
+  filter: brightness(1.03);
+}
+.btn-success:active {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(11, 18, 16, 0.08);
+}
+
+/* outline accent button (secondary) */
+.btn-outline-accent {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 900;
+  border: 2px solid transparent;
+  background-image: linear-gradient(var(--bg), var(--bg)), var(--accent-grad);
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+/* ===========================
+   Footer (uses accent-grad)
+   =========================== */
+.footer {
+  display: block;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.86rem;
+  background: var(--accent-grad);
+  background-size: 200% 200%;
+  animation: gradientShift calc(var(--gradient-duration) * 1.1) ease-in-out
+    infinite;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  color: #071014;
+  box-shadow: var(--shadow);
+}
+
+/* footer links with subtle gradient border */
+.footer-links {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.footer-links a {
+  display: inline-block;
+  padding: 8px 6px;
+  font-weight: 800;
+  color: var(--fg);
+  text-decoration: none;
+  border-radius: 8px;
+  background-image:
+    linear-gradient(var(--bg), var(--bg)), var(--accent-grad-soft);
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  border: 2px solid transparent;
+  box-shadow: 0 6px 16px rgba(11, 18, 16, 0.04);
+  text-align: center;
+}
+.footer-links a:hover {
+  transform: translateY(-3px);
+  text-decoration: none;
+}
+
+/* footer meta */
+.footer-meta {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* ===========================
+   Toast — accent gradient
+   =========================== */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%) translateY(26px);
+  padding: 10px 18px;
+  border-radius: 12px;
+  color: var(--fg);
+  background: var(--accent-grad);
+  background-size: 200% 200%;
+  animation: gradientShift 5.6s linear infinite;
+  box-shadow: 0 10px 28px rgba(11, 18, 16, 0.08);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 2px solid rgba(0, 0, 0, 0.06);
+  font-weight: 800;
+  opacity: 0;
+  transition: all 0.28s ease;
+  z-index: 9999;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.hidden {
+  display: none !important;
+}
+
+/* ===========================
+   Responsive tweaks
+   =========================== */
+@media (max-width: 380px) {
+  body {
+    max-width: 360px;
+    padding: 6px;
+  }
+  .header {
+    padding: 10px;
+    gap: 8px;
+  }
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    padding: 5px;
+  }
+  .logo-text {
+    font-size: 0.95rem;
+    display: none;
+  } /* hide long text in super small viewports */
+  .card {
+    padding: 14px;
+  }
+  .btn-success {
+    padding: 10px;
+    font-size: 0.95rem;
+  }
+  .footer-links {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===========================
+   Accessibility & misc
+   =========================== */
+:focus {
+  outline: 3px solid rgba(15, 182, 155, 0.18);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* small helper for reduced contrast variants if needed */
+.low-contrast {
+  opacity: 0.85;
+}
+
+/* end of file */
+
+:root {
+  --ripple-color-light: rgba(255, 255, 255, 0.36);
+  --ripple-color-dark: rgba(0, 0, 0, 0.18);
+  --ripple-duration: 520ms;
+}
+
+/* Make any element with .ripple produce ripple waves */
+.ripple {
+  position: relative;
+  overflow: hidden; /* important */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ripple .ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  pointer-events: none;
+  will-change: transform, opacity, width, height, left, top;
+  opacity: 0.9;
+  animation: rippleExpand var(--ripple-duration) cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+body:not(.dark) .ripple .ripple-wave {
+  background: var(--ripple-color-light);
+}
+
+body.dark .ripple .ripple-wave {
+  background: var(--ripple-color-dark);
+}
+
+@keyframes rippleExpand {
+  0% {
+    transform: scale(0);
+    opacity: 0.9;
+  }
+  60% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+
+/* optional keyboard focus style for rippleable elements */
+.ripple:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+}

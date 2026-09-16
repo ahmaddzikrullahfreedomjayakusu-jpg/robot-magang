@@ -1,0 +1,155 @@
+{
+  "manifest_version": 3,
+  "name": "Satulink ID",
+  "short_name": "Satulink",
+  "version": "3.3.3",
+  "description": "Ekstensi Berlangganan Satulink ID - Murah dan Berkualitas. Developer: Satulink",
+  "author": "Satulink",
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "permissions": [
+    "cookies",
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms",
+    "notifications",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "<all_urls>",
+
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+
+    "https://*.satulink.id/*",
+
+    "https://*.chatgpt.com/*",
+    "https://*.openai.com/*",
+
+    "https://*.canva.com/*",
+    "https://*.capcut.com/*",
+    "https://*.spotify.com/*",
+    "https://*.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://*.figma.com/*",
+    "https://*.notion.so/*",
+    "https://*.notion.site/*",
+    "https://*.grammarly.com/*",
+    "https://*.quillbot.com/*",
+    "https://*.chegg.com/*",
+    "https://*.github.com/*",
+    "https://*.gitlab.com/*",
+    "https://*.bitbucket.org/*",
+    "https://*.envato.com/*",
+    "https://*.themeforest.net/*",
+    "https://*.mega.nz/*",
+    "https://*.adobe.com/*",
+    "https://*.dropbox.com/*",
+    "https://onedrive.live.com/*",
+    "https://drive.google.com/*",
+    "https://*.box.com/*",
+    "https://*.mediafire.com/*",
+
+    "https://*.netflix.com/*",
+    "https://www.netflix.com/id-en/*",
+    "https://www.netflix.com/id/*",
+    "https://*.disneyplus.com/*",
+    "https://*.hotstar.com/*",
+    "https://*.crunchyroll.com/*",
+    "https://*.hbomax.com/*",
+    "https://*.max.com/*",
+    "https://*.primevideo.com/*",
+    "https://tv.apple.com/*",
+    "https://*.paramountplus.com/*",
+    "https://*.peacocktv.com/*",
+    "https://*.hulu.com/*",
+    "https://*.viu.com/*",
+    "https://*.wetv.vip/*",
+    "https://*.iq.com/*",
+    "https://*.vidio.com/*",
+
+    "https://*.skillshare.com/*",
+    "https://*.coursera.org/*",
+    "https://*.udemy.com/*",
+    "https://*.edx.org/*",
+    "https://*.udacity.com/*",
+    "https://*.pluralsight.com/*",
+    "https://*.datacamp.com/*",
+    "https://*.brilliant.org/*",
+    "https://*.codecademy.com/*",
+
+    "https://*.deezer.com/*",
+    "https://*.tidal.com/*",
+    "https://*.soundcloud.com/*",
+    "https://*.pandora.com/*",
+
+    "https://*.crunchbase.com/*",
+    "https://*.vpn.net/*",
+
+    "https://*.claude.ai/*",
+    "https://*.perplexity.ai/*",
+    "https://gemini.google.com/*",
+    "https://aistudio.google.com/*",
+    "https://copilot.microsoft.com/*",
+    "https://*.blackbox.ai/*",
+    "https://*.phind.com/*",
+    "https://*.replit.com/*",
+    "https://*.codeium.com/*",
+    "https://*.cursor.sh/*",
+    "https://*.poe.com/*",
+
+    "https://*.shutterstock.com/*",
+    "https://*.gettyimages.com/*",
+    "https://*.storyblocks.com/*",
+    "https://*.freepik.com/*",
+    "https://*.icons8.com/*",
+
+    "https://*.trello.com/*",
+    "https://*.slack.com/*",
+    "https://*.atlassian.com/*",
+    "https://*.office.com/*",
+    "https://*.microsoft.com/*",
+
+    "https://*.gojek.com/*",
+    "https://*.grab.com/*",
+    "https://*.tokopedia.com/*",
+    "https://*.shopee.co.id/*",
+    "https://*.bukalapak.com/*",
+    "https://*.lazada.co.id/*",
+    "https://*.blibli.com/*",
+    "https://*.jd.id/*",
+    "https://*.zalora.co.id/*",
+    "https://*.traveloka.com/*",
+    "https://*.tiket.com/*",
+    "https://*.mola.tv/*",
+    "https://*.rctiplus.com/*",
+    "https://*.visionplus.id/*",
+    "https://*.klikfilm.com/*",
+    "https://*.bioskoponline.com/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

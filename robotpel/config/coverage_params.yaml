@@ -1,0 +1,36 @@
+coverage_planner_node:
+  ros__parameters:
+    map_topic: /map
+    amcl_pose_topic: /amcl_pose
+    scan_topic: /scan            # RAW scan (bukan /scan_filtered) -- sektor depan/samping perlu jarak dekat asli
+    global_frame: map
+
+    # --- Ukuran fisik & jarak aman (ubah sesuai robot) ---
+    # Pola: lajur pertama sisi robot 15cm dari dinding (wall_margin), lajur
+    # berikutnya digeser persis 1 lebar badan robot (robot_width=0.50) jadi
+    # 65cm dari dinding yang sama, lajur ke-3 115cm, dst -- edge-to-edge,
+    # tanpa celah/tanpa tumpang tindih.
+    mop_width: 0.40               # lebar kain pel asli, dipakai buat tandai area "sudah dipel" di coverage grid
+    wall_margin: 0.15             # jarak sisi robot ke dinding/rintangan terdekat
+    robot_half_width: 0.25        # setengah lebar badan robot (badan 50cm total)
+    robot_width: 0.50             # lebar badan robot keseluruhan, jarak antar lajur
+
+    # --- Perilaku reaktif (nilai byte motor dari robotmaganglidar1.py, JANGAN diubah sembarangan) ---
+    front_stop_m: 0.30             # tembok di depan sejauh ini -> berhenti, mundur, putar balik
+    wall_confirm_fraction: 0.6     # >=60% ray di sektor depan harus dekat biar dianggap tembok asli, bukan bintik/noise
+    veer_warn_m: 1.0               # ada sesuatu di depan-kanan/depan-kiri sejauh ini -> koreksi halus
+    veer_sharp_m: 0.5              # lebih dekat dari ini -> koreksi tajam
+    front_sector_deg: 20.0         # lebar sektor "depan" (derajat, dari sudut LiDAR-lokal 180)
+    front_diag_center_deg: 135.0   # pusat sektor depan-kanan/depan-kiri (derajat, LiDAR-lokal)
+    front_diag_sector_deg: 25.0    # lebar sektor depan-kanan/depan-kiri
+    reverse_seconds: 0.6           # durasi mundur sebelum putar balik (bukan dari file lama, perkiraan aman)
+    lookahead_map_check_m: 0.0     # 0 = nonaktif (butuh AMCL akurat, sementara dimatikan -- lihat catatan di kode)
+    lane_correct_deg: 8.0          # ambang koreksi arah supaya tetap di lajur
+    map_side_check_m: 1.5          # jarak sampling peta ke kiri/kanan buat nentuin arah putar balik
+
+    # --- Kriteria selesai ---
+    completion_percent: 95.0     # persen area bebas yang harus terpel sebelum dianggap selesai
+    require_localized: true      # tunggu AMCL yakin dengan posisinya sebelum mulai jalan
+    max_pose_covariance: 0.5     # ambang covariance x/y dari /amcl_pose supaya dianggap "sudah localized"
+    status_publish_period: 1.0
+    control_period: 0.1          # detik, seberapa sering state machine reaktif dievaluasi (10Hz)

@@ -1,0 +1,34 @@
+coverage_grid_tracker:
+  ros__parameters:
+    map_topic: /map
+    map_frame: map
+    base_frame: base_link
+    coverage_resolution: 0.10
+    mop_width: 0.42
+    mop_length: 0.28
+    publish_period: 0.5
+
+corridor_shuttle_bug2:
+  ros__parameters:
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+    front_glass_topic: /front_low_range
+    wall_side: left
+    desired_wall_distance: 0.35
+    front_stop_distance: 0.20
+    side_stop_distance: 0.22
+    linear_speed: 0.16
+    turn_speed: 0.45
+    corridor_length: 8.0
+    mop_width: 0.42
+    overlap: 0.08
+    max_lanes: 20
+    mline_tolerance: 0.12
+
+missed_area_dispatcher:
+  ros__parameters:
+    coverage_topic: /mopping/coverage_grid
+    map_frame: map
+    base_frame: base_link
+    min_goal_spacing: 0.25

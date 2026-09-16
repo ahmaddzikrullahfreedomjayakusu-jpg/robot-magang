@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#14b8a6" />
+    <title>Satulink ID</title>
+    <link rel="icon" href="icon.png" type="image/x-icon" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+
+  <body>
+    <!-- Header -->
+    <header class="header" role="banner">
+      <div class="logo-area">
+        <svg
+          class="logo-icon"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M12 2L2 7v7c0 5.52 4.48 10 10 10s10-4.48 10-10V7l-10-5z"
+            fill="currentColor"
+          />
+        </svg>
+        <span class="logo-text">https://satulink.id/</span>
+      </div>
+
+      <button
+        id="darkModeBtn"
+        class="dark-toggle ripple"
+        title="Dark Mode"
+        aria-label="Toggle Dark Mode"
+        role="switch"
+        aria-pressed="false"
+      >
+        🌓
+      </button>
+    </header>
+
+    <!-- Main Card -->
+    <main class="main" role="main">
+      <section
+        class="card"
+        id="statusCard"
+        aria-live="polite"
+        aria-labelledby="cardTitle"
+      >
+        <h2 id="cardTitle" class="card-title">www.satulink.id</h2>
+
+        <!-- Optional: tampilkan paket user di sini (badge) -->
+        <div class="badges" aria-hidden="false">
+          <!-- contoh badge; ganti/dinamis sesuai paket user -->
+          <span class="badge-package">⚡ Info Extension</span>
+          <!-- <span class="badge-package">Paket Extension B</span> -->
+        </div>
+
+        <p id="statusMsg" class="status-blink">
+          ✨ Extension ini hanya syarat saja,<br />
+          Akses Via Dashboard Website <br />
+          <a
+            href="https://satulink.id"
+            target="_blank"
+            rel="noopener noreferrer"
+            >https://satulink.id</a
+          >
+        </p>
+
+        <!-- Tombol Akses Web -->
+        <button
+          id="aksesWeb"
+          class="btn-success ripple"
+          type="button"
+          aria-label="Akses Web"
+        >
+          🌐 Akses Web
+        </button>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer" role="contentinfo">
+      <div class="footer-links" role="navigation" aria-label="Tautan cepat">
+        <a
+          class="ripple"
+          href="https://satulink.id/daftar.php"
+          target="_blank"
+          rel="noopener noreferrer"
+          >📝 Akses Daftar</a
+        >
+        <a
+          class="ripple"
+          href="https://satulink.id/privasi.php"
+          target="_blank"
+          rel="noopener noreferrer"
+          >🔒 Akses Privasi</a
+        >
+        <a
+          class="ripple"
+          href="https://satulink.id/login.php"
+          target="_blank"
+          rel="noopener noreferrer"
+          >🔄 Akses Login</a
+        >
+      </div>
+      <div class="footer-meta">
+        &copy; 2025
+        <strong>
+          <a
+            href="https://bio.satulink.id"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Satulink ID</a
+          >
+        </strong>
+      </div>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite">
+      <span id="toastIcon" aria-hidden="true">ℹ️</span>
+      <span id="toastMsg">Info</span>
+    </div>
+
+    <!-- Audio Feedback (opsional) -->
+    <audio id="successSound" src="success.mp3" preload="auto"></audio>
+    <audio id="warningSound" src="warning.mp3" preload="auto"></audio>
+    <audio id="toggleSound" src="toggle.mp3" preload="auto"></audio>
+
+    <!-- main script (your popup logic) -->
+    <script src="popup.js"></script>
+  </body>
+</html>
