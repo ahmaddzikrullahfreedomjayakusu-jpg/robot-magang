@@ -5572,6 +5572,7 @@ def main():
                     rpm_kiri,
                     rpm_kanan,
                     force=True
+                    
                 )
 
             elif obstacle_action == "AVOID_RIGHT":
