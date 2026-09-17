@@ -2,8 +2,9 @@ coverage_planner_node:
   ros__parameters:
     map_topic: /map
     amcl_pose_topic: /amcl_pose
-    scan_topic: /scan            # RAW scan (bukan /scan_filtered) -- sektor depan/samping perlu jarak dekat asli
+    scan_topic: /scan_filtered   # sudah difilter (buang deteksi laptop belakang + roda kanan-kiri) -- aman sekarang karena front_stop_m dihitung dari moncong, bukan LiDAR
     global_frame: map
+    localization_source: amcl    # "amcl" = peta tersimpan (map_server+AMCL, default, dipakai coverage_launch.py) | "tf" = SLAM hidup langsung, tanpa nyimpen peta (dipakai coverage_live_slam_launch.py) -- lihat docstring atas file coverage_planner_node.py
 
     # --- Ukuran fisik & jarak aman (ubah sesuai robot) ---
     # Pola: lajur pertama sisi robot 15cm dari dinding (wall_margin), lajur
@@ -16,17 +17,39 @@ coverage_planner_node:
     robot_width: 0.50             # lebar badan robot keseluruhan, jarak antar lajur
 
     # --- Perilaku reaktif (nilai byte motor dari robotmaganglidar1.py, JANGAN diubah sembarangan) ---
-    front_stop_m: 0.30             # tembok di depan sejauh ini -> berhenti, mundur, putar balik
+    # Obstacle avoidance sekarang murni LiDAR live (peta cuma dipakai buat
+    # nentuin lajur awal + nandain area yang udah dipel, BUKAN buat ngeblok
+    # jalan real-time lagi -- lihat lookahead_map_check_m di bawah).
+    nose_length_m: 0.30            # jarak LiDAR ke ujung moncong depan robot yang sebenarnya
+    front_stop_m: 0.25             # jarak aman yang diinginkan DI DEPAN MONCONG (bukan dari LiDAR) -> berhenti/mundur/putar balik (dinaikkan dari 0.15, biar zona berhentinya lebih ke depan/lebih awal)
     wall_confirm_fraction: 0.6     # >=60% ray di sektor depan harus dekat biar dianggap tembok asli, bukan bintik/noise
-    veer_warn_m: 1.0               # ada sesuatu di depan-kanan/depan-kiri sejauh ini -> koreksi halus
-    veer_sharp_m: 0.5              # lebih dekat dari ini -> koreksi tajam
-    front_sector_deg: 20.0         # lebar sektor "depan" (derajat, dari sudut LiDAR-lokal 180)
-    front_diag_center_deg: 135.0   # pusat sektor depan-kanan/depan-kiri (derajat, LiDAR-lokal)
-    front_diag_sector_deg: 25.0    # lebar sektor depan-kanan/depan-kiri
+    # Dua radius koreksi, dua-duanya dari titik tengah body (LiDAR di titik
+    # tengah, laser_x=laser_y=0), sisi kiri/kanan ditentukan dari koordinat
+    # (x,y) beneran (bukan tebak sudut LiDAR) -- lihat nearest_in_side_zone
+    # di kode:
+    #  - side_close_m: radius 35cm (diameter 70cm) -- badan robot 50cm
+    #    lebar, jadi ini 10cm lewat tepi badan.
+    #    (Riwayat: 0.40m -> 0.35m -> 0.30m (kerasa mepet banget/kekecilan)
+    #    -> balik ke 0.35m.)
+    #  - veer_circle_radius_m: radius lebih jauh (0.7 meter), buat koreksi
+    #    lebih awal ke arah yang beneran akan kelewatan kalau robot terus
+    #    lurus. (Riwayat: 1.0m -> 0.6m -> 0.5m (waktu itu masih sering
+    #    salah-pilih/zigzag) -> setelah ditambah side_confirm_points +
+    #    front_cone_half_deg + veer_commit_seconds buat nyetabilin, radius
+    #    boleh dinaikkan lagi ke 0.7m biar lebih "maju" jarak antisipasinya.)
+    side_close_m: 0.35             # radius zona dekat -- diameter 70cm (dinaikkan lagi dari 0.30, kekecilan)
+    veer_circle_radius_m: 0.7      # radius zona jauh -> pemicu koreksi halus/jauh (dinaikkan dari 0.5, sekarang udah dijaga confirm_points+cone+commit)
+    veer_sharp_m: 0.38             # di dalam radius manapun di atas, lebih dekat dari ini -> koreksi tajam
+    side_confirm_points: 2         # zona jauh (veer_circle_radius_m) butuh minimal segini titik LiDAR yang konsisten sebelum dianggap rintangan nyata -- 1 titik nyasar/noise saja tidak boleh bikin robot tiba-tiba belok; zona dekat (side_close_m) TIDAK pakai ini, tetap sensitif 1 titik karena itu jaring pengaman terakhir
+    front_cone_half_deg: 60.0      # zona jauh (veer_circle_radius_m) cuma hitung titik dalam 60 derajat dari lurus depan (jadi total kerucut 120 derajat, dilebarkan dari 90 derajat) -- di luar itu (ke arah samping badan) diabaikan, karena jalan lurus gak bakal nyampe ke sana. Zona dekat (side_close_m) TIDAK pakai ini, tetap hemisfer penuh (180 derajat) karena itu jaring pengaman terakhir
+    veer_commit_seconds: 0.4       # begitu robot mulai koreksi ke satu sisi, gak boleh "santai" (turun level/balik lurus) di sisi yang sama sebelum durasi ini lewat -- ini yang benerin zigzag: dinding asli yang nempel pas di ambang batas bikin keputusan lompat-lompat gentle/sharp tiap 0.1 detik (10Hz), padahal bukan salah deteksi. Eskalasi (makin dekat) atau rintangan baru di sisi sebaliknya tetap langsung ditanggapi, gak ketunda
+    front_sector_deg: 20.0         # lebar sektor "depan" (derajat, dari sudut LiDAR-lokal 180) buat cek tembok
     reverse_seconds: 0.6           # durasi mundur sebelum putar balik (bukan dari file lama, perkiraan aman)
-    lookahead_map_check_m: 0.0     # 0 = nonaktif (butuh AMCL akurat, sementara dimatikan -- lihat catatan di kode)
+    lookahead_map_check_m: 0.0     # 0 = nonaktif -- sempat dicoba, malah salah-tembak deket titik awal & bikin robot nyerah lebih cepat
     lane_correct_deg: 8.0          # ambang koreksi arah supaya tetap di lajur
     map_side_check_m: 1.5          # jarak sampling peta ke kiri/kanan buat nentuin arah putar balik
+    min_progress_m: 0.2            # jarak maju minimal dianggap "progress nyata" antar putar balik
+    max_stuck_turns: 3             # berapa kali putar balik beruntun tanpa progress sebelum nyerah (anti muter-muter gajelas)
 
     # --- Kriteria selesai ---
     completion_percent: 95.0     # persen area bebas yang harus terpel sebelum dianggap selesai

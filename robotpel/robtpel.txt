@@ -1,0 +1,31 @@
+Tiap kali mau MAPPING ruangan baru
+HP/Android — nyalain stm_bridge.py
+Terminal 1 (laptop):
+
+"/home/freedom/Documents/Robot magang/robotpel/scripts/start.sh" mapping
+Terminal 2 (laptop):
+
+rviz2 -d "/home/freedom/Documents/Robot magang/robotpel/rviz/mapping.rviz"
+Gerakkan robot manual keliling ruangan sampai map lengkap
+Terminal 3 — simpan map:
+
+source /opt/ros/jazzy/setup.bash
+ros2 run nav2_map_server map_saver_cli \
+    -f "/home/freedom/Documents/Robot magang/robotpel/maps/room" \
+    --ros-args -p save_map_timeout:=5.0
+    
+Ctrl+C di Terminal 1
+Tiap kali mau NGEPEL (pakai map yang udah tersimpan)
+HP/Android — nyalain stm_bridge.py
+Terminal 1 (laptop):
+
+"/home/freedom/Documents/Robot magang/robotpel/scripts/start.sh" coverage
+Terminal 2 (laptop):
+
+rviz2 -d "/home/freedom/Documents/Robot magang/robotpel/rviz/coverage.rviz"
+Di RViz: klik "2D Pose Estimate" → klik-drag di posisi & arah hadap robot yang sebenarnya
+Robot mulai jalan sendiri. Pantau (opsional):
+
+ros2 topic echo /coverage/status
+ros2 topic echo /coverage/percent
+Ctrl+C di Terminal 1 buat berhenti kapan saja

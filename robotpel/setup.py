@@ -26,6 +26,7 @@ setup(
             "coverage_planner_node = robotpel.coverage_planner_node:main",
             "cmd_vel_to_motor_bridge = robotpel.cmd_vel_to_motor_bridge:main",
             "scan_blind_spot_filter = robotpel.scan_blind_spot_filter:main",
+            "waypoint_coverage_node = robotpel.waypoint_coverage_node:main",
         ],
     },
 )
