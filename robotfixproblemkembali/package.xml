@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robotfixproblemkembali</name>
+  <version>0.1.0</version>
+  <description>Frozen snapshot of robotpel_manual_waypoints, saved once outbound+return waypoint driving reliably reached the marked path -- a safe rollback copy, kept separate so further tuning on robotpel_manual_waypoints can't regress this known-good state. Does not modify or replace robotpel or robotpel_manual_waypoints.</description>
+  <maintainer email="ahmaddzikrullahfreedomjayakusu@gmail.com">robot</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
+
+  <exec_depend>nav2_amcl</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>rplidar_ros</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# One-shot bringup buat mode JALUR MANUAL: kamu yang nentuin jalannya lewat
+# klik-klik di RViz, robot jalanin sesuai urutan titik yang kamu tandain.
+#
+# Project TERPISAH dari robotpel (folder ../robotpel) -- robotpel sama
+# sekali TIDAK disentuh/diubah oleh script ini, ini cuma opsi tambahan.
+#
+# Cara pakai:
+#   1. Jalankan script ini.
+#   2. Buka RViz terpisah (perintahnya dicetak di bawah pas script jalan).
+#   3. Klik "2D Pose Estimate", klik posisi awal robot yang sebenarnya (sekali).
+#   4. Klik tool "Publish Point", klik tiap titik jalur yang kamu mau,
+#      urut dari titik pertama sampai terakhir -- tiap klik nambah 1
+#      waypoint, keliatan garis kuning + bola biru di RViz.
+#   5. Kalau udah selesai nandain, klik tool "2D Goal Pose" SEKALI di
+#      mana aja (posisi klik-nya diabaikan, cuma sinyal "mulai jalan").
+#   6. Robot jalan ngikutin titik-titik yang kamu tandain tadi, urut.
+set -eo pipefail
+# NOTE: no "set -u" -- /opt/ros/jazzy/setup.bash itself references unset
+# variables, so nounset mode breaks sourcing it.
+
+# ===== EDIT SESUAI ROBOT KAMU =====
+SERIAL_PORT=""  # kosong = auto-detect LiDAR (Silicon Labs CP210x, VID:PID 10C4:EA60)
+LASER_FRAME="laser"
+LASER_X="0.0"
+LASER_Y="0.0"
+LASER_Z="0.15"
+LASER_ROLL="0.0"
+LASER_PITCH="0.0"
+LASER_YAW="3.14159"
+LASER_INVERTED="false"
+EXCLUDE_RADIUS_M="0.35"
+EXCLUDE_ANGLE_MIN_DEG="0.0"
+EXCLUDE_ANGLE_MAX_DEG="0.0"
+MAP_YAML="/home/freedom/Documents/Robot magang/robotpel/maps/room.yaml"  # peta yang sama dengan robotpel
+STM32_USB_PORT=""  # kosong = auto-detect
+# ===================================
+
+if [ -z "$SERIAL_PORT" ]; then
+    SERIAL_PORT=$(python3 -c "
+import serial.tools.list_ports
+for p in serial.tools.list_ports.comports():
+    if p.vid == 0x10C4 and p.pid == 0xEA60:
+        print(p.device)
+        break
+" 2>/dev/null)
+    if [ -z "$SERIAL_PORT" ]; then
+        echo "[ERROR] Tidak menemukan LiDAR (Silicon Labs CP210x, VID:PID 10C4:EA60) tercolok di USB."
+        echo "        Cek kabelnya, atau isi SERIAL_PORT manual di scripts/start.sh."
+        exit 1
+    fi
+    echo "[LIDAR] Auto-detect port: $SERIAL_PORT"
+fi
+
+ROBOT1_USB_PY="/home/freedom/Documents/Robot magang/robot1_usb.py"  # sama persis dengan yang dipakai robotpel mode coverage -- TIDAK diduplikasi/diubah
+
+if [ ! -f "$MAP_YAML" ]; then
+    echo "[ERROR] Map tidak ditemukan: $MAP_YAML"
+    echo "        Jalankan dulu robotpel mode mapping dan simpan map-nya."
+    exit 1
+fi
+
+STALE_PATTERN="lib/robotpel_manual_waypoints/manual_waypoint_driver_node|lib/robotpel/scan_blind_spot_filter|opt/ros/jazzy/lib/nav2_|opt/ros/jazzy/lib/rplidar_ros|opt/ros/jazzy/lib/tf2_ros/static_transform_publisher|python3 .*robot1_usb\.py"
+stale_pids=$(pgrep -f -- "$STALE_PATTERN" || true)
+if [ -n "$stale_pids" ]; then
+    echo "[CLEANUP] Ada sisa proses dari sesi sebelumnya yang belum mati bersih, dimatikan dulu:"
+    echo "$stale_pids" | xargs -r ps -o pid,cmd -p 2>/dev/null
+    echo "$stale_pids" | xargs -r kill -TERM 2>/dev/null || true
+    sleep 1
+    echo "$stale_pids" | xargs -r kill -KILL 2>/dev/null || true
+fi
+
+echo "[CHECK] Pastikan kabel USB dari laptop ke STM32 sudah kepasang."
+echo "        Port dipilih otomatis (robot1_usb.py), nggak perlu diisi manual."
+
+source /opt/ros/jazzy/setup.bash
+if [ -f "$HOME/ros2_ws/install/setup.bash" ]; then
+    source "$HOME/ros2_ws/install/setup.bash"
+else
+    echo "[ERROR] $HOME/ros2_ws/install/setup.bash tidak ada. Sudah colcon build?"
+    exit 1
+fi
+
+pids=()
+cleanup() {
+    echo ""
+    echo "[STOP] Mematikan semua proses (termasuk semua node turunannya)..."
+    for pid in "${pids[@]}"; do
+        kill -TERM -- "-$pid" 2>/dev/null || true
+    done
+    sleep 2
+    for pid in "${pids[@]}"; do
+        kill -KILL -- "-$pid" 2>/dev/null || true
+    done
+    wait 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+echo "[START] robot1_usb.py (USB langsung ke STM32, port auto-detect -- lihat log-nya buat port yang kepilih)"
+setsid env STM32_USB_PORT="$STM32_USB_PORT" python3 "$ROBOT1_USB_PY" &
+pids+=("$!")
+sleep 2
+
+LIDAR_ARGS=(
+    serial_port:="$SERIAL_PORT"
+    laser_frame:="$LASER_FRAME"
+    laser_x:="$LASER_X" laser_y:="$LASER_Y" laser_z:="$LASER_Z"
+    laser_roll:="$LASER_ROLL" laser_pitch:="$LASER_PITCH" laser_yaw:="$LASER_YAW"
+    laser_inverted:="$LASER_INVERTED"
+    exclude_radius_m:="$EXCLUDE_RADIUS_M"
+    exclude_angle_min_deg:="$EXCLUDE_ANGLE_MIN_DEG" exclude_angle_max_deg:="$EXCLUDE_ANGLE_MAX_DEG"
+)
+
+echo "[START] manual_waypoints_launch.py (RPLidar + TF LiDAR + AMCL + manual_waypoint_driver_node)"
+setsid ros2 launch robotpel_manual_waypoints manual_waypoints_launch.py map:="$MAP_YAML" "${LIDAR_ARGS[@]}" &
+pids+=("$!")
+
+echo ""
+echo "Semua jalan. Buka RViz terpisah (config sudah jadi):"
+echo "  rviz2 -d \"/home/freedom/Documents/Robot magang/robotpel_manual_waypoints/rviz/manual_waypoints.rviz\""
+echo ""
+echo "Di RViz: klik '2D Pose Estimate' di posisi awal robot, lalu 'Publish Point' buat"
+echo "tandain tiap titik jalur (urut), lalu '2D Goal Pose' SEKALI buat mulai jalan."
+echo "Ctrl+C di sini untuk berhenti."
+wait

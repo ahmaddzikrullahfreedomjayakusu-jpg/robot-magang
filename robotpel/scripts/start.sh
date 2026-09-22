@@ -64,7 +64,7 @@ if [ "$MODE" = "push" ] || [ "$MODE" = "push-live" ]; then
 fi
 
 # ===== EDIT SESUAI ROBOT KAMU (kalibrasi LiDAR, lihat README) =====
-SERIAL_PORT="/dev/ttyUSB0"
+SERIAL_PORT=""  # kosong = auto-detect LiDAR (Silicon Labs CP210x, VID:PID 10C4:EA60) -- device USB-serial suka geser (/dev/ttyUSB0 jadi ttyUSB1, dst) tiap dicolok ulang. Isi manual cuma kalau auto-detect salah pilih.
 LASER_FRAME="laser"
 LASER_X="0.0"
 LASER_Y="0.0"
@@ -79,6 +79,22 @@ EXCLUDE_ANGLE_MAX_DEG="0.0"
 MAP_YAML="/home/freedom/Documents/Robot magang/robotpel/maps/room.yaml"  # dipakai kalau MODE=coverage atau push
 STM32_USB_PORT=""  # kosong = auto-detect (pilih port USB selain LiDAR). Isi manual cuma kalau auto-detect salah pilih.
 # ====================================================================
+
+if [ -z "$SERIAL_PORT" ]; then
+    SERIAL_PORT=$(python3 -c "
+import serial.tools.list_ports
+for p in serial.tools.list_ports.comports():
+    if p.vid == 0x10C4 and p.pid == 0xEA60:
+        print(p.device)
+        break
+" 2>/dev/null)
+    if [ -z "$SERIAL_PORT" ]; then
+        echo "[ERROR] Tidak menemukan LiDAR (Silicon Labs CP210x, VID:PID 10C4:EA60) tercolok di USB."
+        echo "        Cek kabelnya, atau isi SERIAL_PORT manual di scripts/start.sh."
+        exit 1
+    fi
+    echo "[LIDAR] Auto-detect port: $SERIAL_PORT"
+fi
 
 ROBOT1_PY="/home/freedom/Documents/Robot magang/robot1.py"
 ROBOT1_USB_PY="/home/freedom/Documents/Robot magang/robot1_usb.py"

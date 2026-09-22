@@ -8,52 +8,55 @@ coverage_planner_node:
 
     # --- Ukuran fisik & jarak aman (ubah sesuai robot) ---
     # Pola: lajur pertama sisi robot 15cm dari dinding (wall_margin), lajur
-    # berikutnya digeser persis 1 lebar badan robot (robot_width=0.50) jadi
-    # 65cm dari dinding yang sama, lajur ke-3 115cm, dst -- edge-to-edge,
+    # berikutnya digeser persis 1 lebar badan robot (robot_width=0.60) jadi
+    # 75cm dari dinding yang sama, lajur ke-3 135cm, dst -- edge-to-edge,
     # tanpa celah/tanpa tumpang tindih.
     mop_width: 0.40               # lebar kain pel asli, dipakai buat tandai area "sudah dipel" di coverage grid
     wall_margin: 0.15             # jarak sisi robot ke dinding/rintangan terdekat
-    robot_half_width: 0.25        # setengah lebar badan robot (badan 50cm total)
-    robot_width: 0.50             # lebar badan robot keseluruhan, jarak antar lajur
+    robot_half_width: 0.30        # setengah lebar badan robot (badan 60cm total -- dinaikkan dari 50cm, ukuran fisik robot sebenarnya)
+    robot_width: 0.60             # lebar badan robot keseluruhan, jarak antar lajur (dinaikkan dari 0.50)
+    shift_distance_m: 0.40        # sekarang cuma jadi BATAS ATAS jarak geser (lihat _shift_done()) -- gesernya berhenti otomatis pas kedeteksi live udah keluar dari jejak hijau (CoverageTracker), bukan nebak jarak tetap lagi. Ini cuma jaga-jaga kalau gak ada jejak buat dideteksi (misal lajur pertama)
+    min_shift_for_edge_check_m: 0.10  # geser minimal segini dulu baru mulai ngecek "udah keluar jejak hijau apa belum" -- biar gak langsung berhenti gara-gara udah pas di ujung dari awal
 
     # --- Perilaku reaktif (nilai byte motor dari robotmaganglidar1.py, JANGAN diubah sembarangan) ---
-    # Obstacle avoidance sekarang murni LiDAR live (peta cuma dipakai buat
-    # nentuin lajur awal + nandain area yang udah dipel, BUKAN buat ngeblok
-    # jalan real-time lagi -- lihat lookahead_map_check_m di bawah).
+    # SENGAJA DISEDERHANAKAN: robot cuma jalan LURUS sampai ketemu tembok
+    # asli di depan, lalu berhenti -> mundur -> putar balik -> lurus lagi.
+    # Gak ada lagi koreksi kanan-kiri buat hindari rintangan samping atau
+    # buat tetap presisi di lajur -- itu semua (side_close_m,
+    # veer_circle_radius_m, veer_sharp_m, side_confirm_points,
+    # front_cone_half_deg, veer_commit_seconds, lane_correct_deg) udah
+    # dihapus karena malah jadi sumber ketidakstabilan (zigzag, arah
+    # kebalik, lompat-lompat) walau udah berkali-kali di-tuning. Fokus dulu
+    # bikin lurus+putar-balik ini konsisten sebelum nambah lagi.
     nose_length_m: 0.30            # jarak LiDAR ke ujung moncong depan robot yang sebenarnya
-    front_stop_m: 0.25             # jarak aman yang diinginkan DI DEPAN MONCONG (bukan dari LiDAR) -> berhenti/mundur/putar balik (dinaikkan dari 0.15, biar zona berhentinya lebih ke depan/lebih awal)
+    front_stop_m: 0.35             # jarak aman yang diinginkan DI DEPAN MONCONG (bukan dari LiDAR) -> berhenti/mundur/putar balik (dinaikkan bertahap dari 0.15 -> 0.25 -> 0.35, biar zona berhentinya lebih ke depan/lebih awal)
     wall_confirm_fraction: 0.6     # >=60% ray di sektor depan harus dekat biar dianggap tembok asli, bukan bintik/noise
-    # Dua radius koreksi, dua-duanya dari titik tengah body (LiDAR di titik
-    # tengah, laser_x=laser_y=0), sisi kiri/kanan ditentukan dari koordinat
-    # (x,y) beneran (bukan tebak sudut LiDAR) -- lihat nearest_in_side_zone
-    # di kode:
-    #  - side_close_m: radius 35cm (diameter 70cm) -- badan robot 50cm
-    #    lebar, jadi ini 10cm lewat tepi badan.
-    #    (Riwayat: 0.40m -> 0.35m -> 0.30m (kerasa mepet banget/kekecilan)
-    #    -> balik ke 0.35m.)
-    #  - veer_circle_radius_m: radius lebih jauh (0.7 meter), buat koreksi
-    #    lebih awal ke arah yang beneran akan kelewatan kalau robot terus
-    #    lurus. (Riwayat: 1.0m -> 0.6m -> 0.5m (waktu itu masih sering
-    #    salah-pilih/zigzag) -> setelah ditambah side_confirm_points +
-    #    front_cone_half_deg + veer_commit_seconds buat nyetabilin, radius
-    #    boleh dinaikkan lagi ke 0.7m biar lebih "maju" jarak antisipasinya.)
-    side_close_m: 0.35             # radius zona dekat -- diameter 70cm (dinaikkan lagi dari 0.30, kekecilan)
-    veer_circle_radius_m: 0.7      # radius zona jauh -> pemicu koreksi halus/jauh (dinaikkan dari 0.5, sekarang udah dijaga confirm_points+cone+commit)
-    veer_sharp_m: 0.38             # di dalam radius manapun di atas, lebih dekat dari ini -> koreksi tajam
-    side_confirm_points: 2         # zona jauh (veer_circle_radius_m) butuh minimal segini titik LiDAR yang konsisten sebelum dianggap rintangan nyata -- 1 titik nyasar/noise saja tidak boleh bikin robot tiba-tiba belok; zona dekat (side_close_m) TIDAK pakai ini, tetap sensitif 1 titik karena itu jaring pengaman terakhir
-    front_cone_half_deg: 60.0      # zona jauh (veer_circle_radius_m) cuma hitung titik dalam 60 derajat dari lurus depan (jadi total kerucut 120 derajat, dilebarkan dari 90 derajat) -- di luar itu (ke arah samping badan) diabaikan, karena jalan lurus gak bakal nyampe ke sana. Zona dekat (side_close_m) TIDAK pakai ini, tetap hemisfer penuh (180 derajat) karena itu jaring pengaman terakhir
-    veer_commit_seconds: 0.4       # begitu robot mulai koreksi ke satu sisi, gak boleh "santai" (turun level/balik lurus) di sisi yang sama sebelum durasi ini lewat -- ini yang benerin zigzag: dinding asli yang nempel pas di ambang batas bikin keputusan lompat-lompat gentle/sharp tiap 0.1 detik (10Hz), padahal bukan salah deteksi. Eskalasi (makin dekat) atau rintangan baru di sisi sebaliknya tetap langsung ditanggapi, gak ketunda
     front_sector_deg: 20.0         # lebar sektor "depan" (derajat, dari sudut LiDAR-lokal 180) buat cek tembok
-    reverse_seconds: 0.6           # durasi mundur sebelum putar balik (bukan dari file lama, perkiraan aman)
+    reverse_seconds: 1.0           # durasi mundur sebelum putar balik (riwayat: 0.6 -> 0.9 -> 1.5 -> 1.0)
     lookahead_map_check_m: 0.0     # 0 = nonaktif -- sempat dicoba, malah salah-tembak deket titik awal & bikin robot nyerah lebih cepat
-    lane_correct_deg: 8.0          # ambang koreksi arah supaya tetap di lajur
+    coverage_lookahead_m: 0.6      # beda dari di atas -- ini ngecek area yang UDAH KEPEL di depan (bukan area gak aman), AKTIF by default: kalau kebanyakan area di depan udah pernah dilewati, diperlakukan kayak tembok (berhenti/mundur/putar balik)
+    coverage_lookahead_confirm_fraction: 0.6  # minimal porsi area di depan yang harus udah kepel biar dianggap "terhalang"
     map_side_check_m: 1.5          # jarak sampling peta ke kiri/kanan buat nentuin arah putar balik
+    coverage_avoid_weight: 2.5     # seberapa berat "sisi ini udah kepel" mempengaruhi pilihan arah belok dibanding "sisi ini lapang" -- 1.0 = seimbang, dinaikkan biar robot lebih ogah belok balik ke jalur yang udah pernah dilewati, walau sisi itu kelihatan lebih lapang di peta
+    # Deteksi macet/nabrak: odometry itu hasil hitungan dari encoder roda,
+    # jadi kalau badan robot beneran kejepit/nyangkut (roda masih muter
+    # tapi badan gak beneran maju -- misal ada barang rendah yang gak
+    # kena scan LiDAR, atau karpet nyangkut), odometry bisa tetap ngaku
+    # ada progress padahal aslinya diam. Dicek silang tiap
+    # stall_check_period_s: kalau odometry ngaku maju >= stall_min_progress_m
+    # TAPI jarak LiDAR ke depan gak ikut ngedeket (< stall_min_front_decrease_ratio
+    # dari jarak yang diklaim), dan emang ada sesuatu yang kedeteksi di depan
+    # (< stall_watch_range_m), itu dianggap nabrak/macet -> berhenti, mundur, putar balik (sama kayak ketemu tembok beneran)
+    stall_check_period_s: 0.5
+    stall_min_progress_m: 0.05
+    stall_watch_range_m: 1.0
+    stall_min_front_decrease_ratio: 0.3
     min_progress_m: 0.2            # jarak maju minimal dianggap "progress nyata" antar putar balik
-    max_stuck_turns: 3             # berapa kali putar balik beruntun tanpa progress sebelum nyerah (anti muter-muter gajelas)
+    max_stuck_turns: 6             # berapa kali putar balik beruntun tanpa progress sebelum nyerah (anti muter-muter gajelas) -- dinaikkan dari 3, sempat nyerah kecepetan di sudut yang padat furnitur
 
     # --- Kriteria selesai ---
     completion_percent: 95.0     # persen area bebas yang harus terpel sebelum dianggap selesai
     require_localized: true      # tunggu AMCL yakin dengan posisinya sebelum mulai jalan
-    max_pose_covariance: 0.5     # ambang covariance x/y dari /amcl_pose supaya dianggap "sudah localized"
+    max_pose_covariance: 3.0     # ambang covariance x/y dari /amcl_pose supaya dianggap "sudah localized" (dilonggarkan dari 0.5 -- covariance abis klik doang belum turun banyak, robot butuh gerak buat AMCL makin yakin, tapi robot gak gerak sebelum localized = deadlock)
     status_publish_period: 1.0
     control_period: 0.1          # detik, seberapa sering state machine reaktif dievaluasi (10Hz)
