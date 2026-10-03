@@ -276,7 +276,7 @@ class RobotNode(Node):
 
         while rclpy.ok() and self.running:
 
-            port = autodetect_stm32_port()
+            port = SERIAL_PORT_OVERRIDE or autodetect_stm32_port()
 
             if port is None:
                 self.get_logger().warning(

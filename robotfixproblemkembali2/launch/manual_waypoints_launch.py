@@ -18,7 +18,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    own_share = get_package_share_directory("robotpel_manual_waypoints")
+    own_share = get_package_share_directory("robotfixproblemkembali2")
     robotpel_share = get_package_share_directory("robotpel")
     default_map = os.path.join(robotpel_share, "maps", "room.yaml")
     default_nav2_params = os.path.join(robotpel_share, "config", "nav2_params.yaml")
@@ -195,7 +195,7 @@ def generate_launch_description():
 
             # --- Manual waypoint driver ---
             Node(
-                package="robotpel_manual_waypoints",
+                package="robotfixproblemkembali2",
                 executable="manual_waypoint_driver_node",
                 name="manual_waypoint_driver_node",
                 output="screen",

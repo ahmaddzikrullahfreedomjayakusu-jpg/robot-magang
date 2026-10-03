@@ -1,0 +1,19 @@
+running egg_info
+writing build/pelcdx/pelcdx.egg-info/PKG-INFO
+writing dependency_links to build/pelcdx/pelcdx.egg-info/dependency_links.txt
+writing entry points to build/pelcdx/pelcdx.egg-info/entry_points.txt
+writing requirements to build/pelcdx/pelcdx.egg-info/requires.txt
+writing top-level names to build/pelcdx/pelcdx.egg-info/top_level.txt
+reading manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+writing manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+running build
+running build_py
+running install
+running install_lib
+running install_data
+running install_egg_info
+removing '/home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx-0.1.0-py3.12.egg-info' (and everything under it)
+Copying build/pelcdx/pelcdx.egg-info to /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx-0.1.0-py3.12.egg-info
+running install_scripts
+Installing manual_waypoint_driver_node script to /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/pelcdx
+writing list of installed files to '/home/lattepanda/Robot magang/pelcdx/build/pelcdx/install.log'

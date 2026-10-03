@@ -60,7 +60,7 @@ if [ ! -f "$MAP_YAML" ]; then
     exit 1
 fi
 
-STALE_PATTERN="lib/robotpel_manual_waypoints/manual_waypoint_driver_node|lib/robotpel/scan_blind_spot_filter|opt/ros/jazzy/lib/nav2_|opt/ros/jazzy/lib/rplidar_ros|opt/ros/jazzy/lib/tf2_ros/static_transform_publisher|python3 .*robot1_usb\.py"
+STALE_PATTERN="lib/robotfixproblemkembali2/manual_waypoint_driver_node|lib/robotpel/scan_blind_spot_filter|opt/ros/jazzy/lib/nav2_|opt/ros/jazzy/lib/rplidar_ros|opt/ros/jazzy/lib/tf2_ros/static_transform_publisher|python3 .*robot1_usb\.py"
 stale_pids=$(pgrep -f -- "$STALE_PATTERN" || true)
 if [ -n "$stale_pids" ]; then
     echo "[CLEANUP] Ada sisa proses dari sesi sebelumnya yang belum mati bersih, dimatikan dulu:"
@@ -112,12 +112,12 @@ LIDAR_ARGS=(
 )
 
 echo "[START] manual_waypoints_launch.py (RPLidar + TF LiDAR + AMCL + manual_waypoint_driver_node)"
-setsid ros2 launch robotpel_manual_waypoints manual_waypoints_launch.py map:="$MAP_YAML" "${LIDAR_ARGS[@]}" &
+setsid ros2 launch robotfixproblemkembali2 manual_waypoints_launch.py map:="$MAP_YAML" "${LIDAR_ARGS[@]}" &
 pids+=("$!")
 
 echo ""
 echo "Semua jalan. Buka RViz terpisah (config sudah jadi):"
-echo "  rviz2 -d \"/home/freedom/Documents/Robot magang/robotpel_manual_waypoints/rviz/manual_waypoints.rviz\""
+echo "  rviz2 -d \"/home/freedom/Documents/Robot magang/robotfixproblemkembali2/rviz/manual_waypoints.rviz\""
 echo ""
 echo "Di RViz: klik '2D Pose Estimate' di posisi awal robot, lalu 'Publish Point' buat"
 echo "tandain tiap titik jalur (urut), lalu '2D Goal Pose' SEKALI buat mulai jalan."

@@ -4,6 +4,7 @@ manual_waypoint_driver_node:
     scan_topic: /scan_filtered   # sudah difilter (buang deteksi laptop belakang + roda kanan-kiri), sama seperti robotpel
     clicked_point_topic: /clicked_point   # RViz tool "Publish Point" -- tiap klik = 1 titik jalur ditambahkan
     start_trigger_topic: /goal_pose       # RViz tool "2D Goal Pose" -- klik sekali buat mulai jalan (posisi kliknya sendiri diabaikan, cuma dipakai sebagai sinyal "mulai")
+    initial_pose_topic: /initialpose      # RViz tool "2D Pose Estimate" -- pas lagi jalan, dipakai buat lompat ke titik jalur terdekat dari posisi baru itu dan lanjut ke pucuk, bukan balik ngejar titik lama
     global_frame: map
 
     waypoint_tolerance_m: 0.15     # radius dianggap "sudah sampai" titik itu
@@ -19,7 +20,8 @@ manual_waypoint_driver_node:
     stall_check_period_s: 4.0
     stall_min_progress_m: 0.04
     reverse_escape_seconds: 1.2
-    start_straight_seconds: 2.0    # lurus dulu sebentar pas awal mulai jalan, sebelum sistem koreksi mulai aktif
+    start_straight_seconds: 4.0    # lurus dulu sebentar pas awal mulai jalan, sebelum sistem koreksi mulai aktif (dinaikkan dari 2.0 -- 2 detik kurang, robot masih sempat muter-muter di awal sebelum arahnya settle)
+    post_turn_settle_seconds: 1.0  # sama kayak di atas tapi triggernya tiap abis koreksi SHARP/SPIN mereda -- kasih waktu robot "tenang" dulu sebentar sebelum bereaksi ke ayunan sisa dari belokan tadi (dulu ayunan sisa itu langsung dianggap deviasi baru, bikin zigzag abis nikung)
 
     # Deteksi tembok-di-depan disamain PERSIS ke robotpel/coverage_planner_node
     # (nilai hasil tuning berkali-kali di situ) -- yang beda cuma cara
@@ -29,9 +31,13 @@ manual_waypoint_driver_node:
     front_sector_deg: 20.0         # lebar sektor "depan" buat cek tembok
     wall_confirm_fraction: 0.6     # >=60% ray di sektor depan harus dekat biar dianggap tembok asli, bukan bintik/noise
     front_wall_min_valid_rays: 5   # minimal segini banyak ray yang beneran kena pantulan -- di area kaca cuma 1-2 titik pantul dari bingkai tapi kena ke-anggap "100% tembok" (fraction doang ga cukup), bikin pause/resume berkedip-kedip lama di situ
+    front_side_steer_margin_m: 0.15  # kalo ada benda di depan, sisi kiri/kanan harus beda jarak minimal segini baru dianggap "ada celah beneran" buat nyelip -- kalo cuma beda dikit (lorong sempit wajar, dua sisi mepet) tetap milih berhenti, bukan nyerempet paksa
+    front_dodge_clearance_margin_m: 0.15  # sisi yang dipilih buat nyelip juga harus beneran cukup lebar buat badan robot (bukan cuma "lebih lapang dikit" dari sisi satunya)
+    front_dodge_deg: 20.0           # sekali nyelip, robot belok tetap 20 derajat lalu balik jalan normal -- bukan terus-menerus belok tajam selama obstacle kedeteksi (itu yang bikin kebablasan)
+    front_dodge_timeout_s: 3.0      # batas aman kalau gagal capai sudut itu (jarang kejadian, jaring pengaman doang)
     front_clear_margin_m: 0.15     # ambang lanjut jalan HARUS lebih longgar dari ambang berhenti, biar gak chattering (berhenti-jalan-berhenti) pas jaluur mepet tembok/sudut
 
-    robot_half_width: 0.30
+    robot_half_width: 0.25         # setengah lebar badan robot asli (50cm) -- sebelumnya 0.30 (60cm, kegedean dikit dari asli), cuma dipakai buat gambar lingkaran badan robot di RViz + jarak aman minimal pas nyelip obstacle
     robot_width: 0.80              # lebar pita hijau (koridor) di RViz, dan juga lebar badan robot (dinaikkan bertahap 0.60 -> 0.70 -> 0.80, biar ada slack lebih -- kanan-kirinya kerasa macet/lompat-lompat). Sekarang juga jadi patokan eskalasi koreksi langsung berdasarkan jarak (lihat cross-track distance escalation di kode): >=setengah ini -> tajam, >=segini penuh -> SPIN
 
     # --- Hindar rintangan samping + koreksi tetap di dalam pita hijau ---
@@ -44,14 +50,18 @@ manual_waypoint_driver_node:
     # "commit" biar keputusan gak lompat-lompat tiap 0.1 detik -- teknik
     # yang sama persis yang akhirnya kerja bener di robotpel.
     side_close_m: 0.35             # zona dekat, sensitif 1 titik -- jaring pengaman terakhir
-    side_avoid_radius_m: 0.45      # zona waspada dini -- dipersempit, sebelumnya kelewat sensitif di lorong sempit (tembok kanan-kiri emang selalu deket di situ, bukan berarti bahaya), sekarang cuma aktif kalau beneran mulai deket
+    side_avoid_radius_m: 0.60      # zona waspada dini -- dilebarin lagi dari 0.45 (live testing: kardus di dalam jalur hijau kedeteksi tapi cuma sempat GENTLE sebentar sebelum kesenggol, kurang jarak/waktu buat beneran ngehindar). Sekarang narrow-corridor over-sensitivity yang dulu jadi alasan dipersempit udah ditangani lewat lane-filter + side_center_margin_m di atas, jadi lebih lega gapapa
     side_confirm_points: 2
-    side_cone_half_deg: 60.0       # zona jauh cuma lihat dalam kerucut 120 derajat pas di depan
+    side_cone_half_deg: 85.0       # zona jauh cuma lihat dalam kerucut ini pas di depan -- dilebarin dari 60 (kerucut 120 derajat), soalnya pas robot lagi aktif nikung arah hadapnya berubah terus, barang yang posisinya tetap di jalur hijau bisa "kesapu keluar" dari kerucut sempit sesaat pas lagi muter, walau jaraknya deket (live testing: obstacle di dalam jalur ketabrak, obstacle_level gak pernah nyala sama sekali sepanjang run)
     veer_sharp_m: 0.38             # di dalam radius manapun, lebih dekat dari ini -> koreksi tajam
+    side_center_margin_m: 0.15     # di lorong sempit, ada barang kanan-kiri dua-duanya -- cuma beneran belok ke salah satu sisi kalau sisi itu emang lebih deket segini dari sisi satunya, kalau jaraknya mirip dianggap udah di tengah, jalan lurus aja (dulu selalu cek kanan duluan, di lorong sempit ini bikin gonta-ganti keputusan tiap tick kelihatan bingung/zigzag)
     veer_commit_seconds: 0.4       # tahan level koreksi ini dulu sebelum boleh "santai", anti lompat-lompat
 
     cross_track_gain: 0.35         # makin jauh dari garis tengah pita hijau, makin kuat tarikan koreksinya (diturunkan bertahap 0.6 -> 0.4 -> 0.35, koreksi keras bikin kebablasan)
+    turn_lookahead_m: 0.5          # arah belok sekarang ngacu ke titik SEJAUH INI di depan (bukan cuma segmen pendek langsung setelah dihalusin) -- biar dia nentuin 1 arah belok yang jelas buat motong tikungan, bukan ngikutin tiap lekukan kecil satu-satu. Ini CUMA ubah acuan arah belok, cross_track (batas tepi jalur) tetap dihitung dari segmen langsung seperti biasa
     lane_correct_deg: 18.0         # ambang buat naik dari koreksi ringan ke koreksi tajam (dinaikkan bertahap 8.0 -> 10.0 -> 18.0 -- sekarang koreksi ringan yang nanganin hampir semua kondisi, tajam cuma buat kondisi ekstrem)
+    corridor_straight_deadband_deg: 12.0  # zona "anggap aja udah lurus, gausah koreksi" -- kalau kekecilan, robot yang udah deket banget ke tengah jalur (beda cm doang) jadi bolak-balik ganti keputusan kiri/kanan tiap tick (kelihatan "bingung/pusing"), soalnya begitu pindah sisi _commit_level gak nahan dulu kayak kalau mau balik ke STRAIGHT (dinaikkan dari 8.0 -- live testing masih ada goyangan kecil GENTLE_LEFT/RIGHT bolak-balik pas udah deket tengah)
+    corridor_straight_deadband_cross_track_m: 0.14  # zona aman di atas CUMA boleh aktif kalau posisi robot beneran deket garis tengah (di bawah ini) -- tanpa batas ini, drift beneran (misal 0.22m melenceng) bisa ke-anggap "lurus" juga dan robot macet gak pernah koreksi balik ke jalur (dinaikkan dari 0.10 -- goyangan kecil yang masih tersisa nyentuh 0.10-0.13m, kelewat dari batas lama)
     spin_correct_deg: 45.0         # ambang buat naik dari tajam ke SPIN (satu roda mundur, roda lain tetap maju) -- SHARP doang cuma pelanin satu roda, ternyata kurang kuat buat mutar balik kalo deviasinya udah ekstrem (pernah sampe >1m), robot jadi jalan terus tanpa pernah nyampe sampai akhirnya di-skip paksa. SPIN tetap jalan (gak pernah diem total), cuma belokannya jauh lebih tajam
 
     # --- Penghalusan jalur: belokan halus dibikin kurva, belokan tajam dibiarin ---
@@ -62,4 +72,4 @@ manual_waypoint_driver_node:
     # dibiarin apa adanya (tetap belok tajam beneran).
     sharp_turn_threshold_deg: 60.0  # belokan setajam ini atau lebih tetap jadi sudut keras (putar di tempat)
     corner_round_fraction: 0.3      # seberapa jauh dari sudut mulai dihaluskan (fraksi dari sisi terpendek yang nempel ke sudut itu)
-    corner_round_points: 6          # jumlah titik sampling di tiap lengkungan sudut yang dihaluskan
+    corner_round_points: 16         # jumlah titik sampling di tiap lengkungan sudut yang dihaluskan -- dinaikkan dari 6, biar patokan garis-lurus-per-segmen jauh lebih deket ke bentuk lengkung aslinya, jadi cross_track gak goyang besar pas nikung padahal robotnya udah ngikutin lengkungan dengan benar

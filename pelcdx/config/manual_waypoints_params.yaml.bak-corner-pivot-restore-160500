@@ -1,0 +1,112 @@
+manual_waypoint_driver_node:
+  ros__parameters:
+    amcl_pose_topic: /amcl_pose
+    odom_topic: /odom            # encoder asli dari robot1_usb.py -- dipakai KHUSUS buat cek stall (lihat komentar di kode), bukan buat ngikutin jalur
+    scan_topic: /scan_filtered   # sudah difilter (buang deteksi laptop belakang + roda kanan-kiri), sama seperti robotpel
+    clicked_point_topic: /clicked_point   # RViz tool "Publish Point" -- tiap klik = 1 titik jalur ditambahkan
+    start_trigger_topic: /goal_pose       # RViz tool "2D Goal Pose" -- klik sekali buat mulai jalan (posisi kliknya sendiri diabaikan, cuma dipakai sebagai sinyal "mulai")
+    initial_pose_topic: /initialpose      # RViz tool "2D Pose Estimate" -- pas lagi jalan, dipakai buat lompat ke titik jalur terdekat dari posisi baru itu dan lanjut ke pucuk, bukan balik ngejar titik lama
+    global_frame: map
+
+    waypoint_tolerance_m: 0.15     # radius dianggap "sudah sampai" titik itu
+    end_waypoint_tolerance_m: 0.45 # ujung jalur lebih longgar supaya tidak kebablasan melewati titik akhir
+    end_overshoot_margin_m: 0.05   # kalau sudah lewat ujung segmen sejauh ini, dianggap sampai dan mulai balik
+    turn_pivot_tolerance_deg: 15.0 # putar balik tidak perlu presisi ekstrem; sisanya dikoreksi sambil jalan
+    turn_pivot_timeout_s: 2.2      # batasi putar balik supaya tidak muter-muter di tempat
+    corner_turn_tolerance_deg: 12.0 # tikungan tengah jalur lebih cepat lepas dari pivot, biar tidak muter di tempat
+    corner_turn_timeout_s: 1.8     # batas pivot tikungan tengah jalur; sisanya dikoreksi sambil jalan
+    drive_timeout_s: 30.0          # batas aman per titik kalau gak kunjung sampai (skip ke titik berikutnya)
+    # Deteksi macet beneran: kejadian live, robot kejepit fisik di satu titik --
+    # motor tetap dikirim terus (gak pernah neutral) tapi posisi (AMCL) beku
+    # sama sekali selama puluhan detik, kelihatan kayak "diem" padahal
+    # sistemnya jalan terus. Jendela cek panjang + ambang gerak kecil biar
+    # jalan pelan biasa (nikung dll) gak ke-anggap macet. Kalo kedeteksi
+    # macet, robot MUNDUR sebentar (bukan skip paksa, bukan diem) baru lanjut.
+    stall_check_period_s: 4.0
+    stall_min_progress_m: 0.04
+    reverse_escape_seconds: 1.2
+    start_straight_seconds: 4.0    # lurus dulu sebentar pas awal mulai jalan, sebelum sistem koreksi mulai aktif (dinaikkan dari 2.0 -- 2 detik kurang, robot masih sempat muter-muter di awal sebelum arahnya settle)
+    post_turn_settle_seconds: 2.0  # setelah pivot tikungan, paksa jalan maju dulu supaya koreksi tidak langsung belok terus/berputar di tempat
+
+    # Deteksi tembok-di-depan disamain PERSIS ke robotpel/coverage_planner_node
+    # (nilai hasil tuning berkali-kali di situ) -- yang beda cuma cara
+    # robotnya jalan (ngikutin titik manual di sini vs lurus+putar balik di robotpel)
+    nose_length_m: 0.30            # jarak LiDAR ke ujung moncong depan robot yang sebenarnya
+    front_stop_m: 0.35             # jarak aman yang diinginkan DI DEPAN MONCONG (bukan dari LiDAR) -> total dari LiDAR = nose_length_m + front_stop_m = 0.65m
+    front_sector_deg: 20.0         # lebar sektor "depan" buat cek tembok
+    wall_confirm_fraction: 0.6     # >=60% ray di sektor depan harus dekat biar dianggap tembok asli, bukan bintik/noise
+    front_wall_min_valid_rays: 5   # minimal segini banyak ray yang beneran kena pantulan -- di area kaca cuma 1-2 titik pantul dari bingkai tapi kena ke-anggap "100% tembok" (fraction doang ga cukup), bikin pause/resume berkedip-kedip lama di situ
+    front_side_steer_margin_m: 0.15  # kalo ada benda di depan, sisi kiri/kanan harus beda jarak minimal segini baru dianggap "ada celah beneran" buat nyelip -- kalo cuma beda dikit (lorong sempit wajar, dua sisi mepet) tetap milih berhenti, bukan nyerempet paksa
+    front_dodge_clearance_margin_m: 0.15  # sisi yang dipilih buat nyelip juga harus beneran cukup lebar buat badan robot (bukan cuma "lebih lapang dikit" dari sisi satunya)
+    front_dodge_deg: 20.0           # sekali nyelip, robot belok tetap 20 derajat lalu balik jalan normal -- bukan terus-menerus belok tajam selama obstacle kedeteksi (itu yang bikin kebablasan)
+    front_dodge_timeout_s: 3.0      # batas aman kalau gagal capai sudut itu (jarang kejadian, jaring pengaman doang)
+    front_clear_margin_m: 0.15     # ambang lanjut jalan HARUS lebih longgar dari ambang berhenti, biar gak chattering (berhenti-jalan-berhenti) pas jaluur mepet tembok/sudut
+
+    robot_half_width: 0.25         # setengah lebar badan robot asli (50cm) -- sebelumnya 0.30 (60cm, kegedean dikit dari asli), cuma dipakai buat gambar lingkaran badan robot di RViz + jarak aman minimal pas nyelip obstacle
+    robot_width: 0.80              # lebar pita hijau (koridor) di RViz, dan juga lebar badan robot (dinaikkan bertahap 0.60 -> 0.70 -> 0.80, biar ada slack lebih -- kanan-kirinya kerasa macet/lompat-lompat). Sekarang juga jadi patokan eskalasi koreksi langsung berdasarkan jarak (lihat cross-track distance escalation di kode): >=setengah ini -> tajam, >=segini penuh -> SPIN
+
+    # --- Hindar rintangan samping + koreksi tetap di dalam pita hijau ---
+    # SATU keputusan gabungan (bukan 2 sistem terpisah lagi): tiap tick,
+    # dibandingkan "ada rintangan di samping?" vs "melenceng dari garis
+    # tengah pita hijau?", yang lebih parah yang menang, hasilnya cuma 3
+    # kemungkinan -- lurus / belok ringan / belok tajam -- persis
+    # byte robotmaganglidar1.py (97/107/117). Klasifikasi kiri/kanan
+    # pakai koordinat (x,y) beneran (bukan tebak sudut LiDAR), plus
+    # "commit" biar keputusan gak lompat-lompat tiap 0.1 detik -- teknik
+    # yang sama persis yang akhirnya kerja bener di robotpel.
+    side_close_m: 0.40             # emergency dekat body; lebih cepat menghindar samping sebelum nabrak
+    side_avoid_radius_m: 0.58      # zona waspada dini -- dilebarin lagi dari 0.45 (live testing: kardus di dalam jalur hijau kedeteksi tapi cuma sempat GENTLE sebentar sebelum kesenggol, kurang jarak/waktu buat beneran ngehindar). Sekarang narrow-corridor over-sensitivity yang dulu jadi alasan dipersempit udah ditangani lewat lane-filter + side_center_margin_m di atas, jadi lebih lega gapapa
+    side_confirm_points: 2
+    side_cone_half_deg: 75.0       # zona serong kiri/kanan
+    diag_obstacle_body_clearance_m: 0.15  # jarak aman 15cm dihitung dari tepi body robot, bukan dari titik LiDAR
+    veer_sharp_m: 0.34             # samping mulai dekat langsung koreksi tajam supaya aman dari obstacle
+    side_center_margin_m: 0.15     # di lorong sempit, ada barang kanan-kiri dua-duanya -- cuma beneran belok ke salah satu sisi kalau sisi itu emang lebih deket segini dari sisi satunya, kalau jaraknya mirip dianggap udah di tengah, jalan lurus aja (dulu selalu cek kanan duluan, di lorong sempit ini bikin gonta-ganti keputusan tiap tick kelihatan bingung/zigzag)
+    veer_commit_seconds: 0.45       # tahan koreksi sedikit lebih lama supaya tidak bolak-balik kiri/kanan zigzag
+
+    cross_track_gain: 0.32         # lebih patuh ke tengah jalur hijau, tapi masih tidak sekeras nilai lama yang bikin zigzag
+    turn_lookahead_m: 0.75         # lihat sedikit lebih jauh di depan jalur hijau supaya koreksi lebih halus dan tidak mengejar titik dekat
+    curve_lookahead_m: 0.36        # saat jalur menikung, lihat lebih dekat supaya belok lebih tajam mengikuti kurva
+    curve_detect_deg: 25.0         # beda arah segmen vs lookahead sebesar ini dianggap tikungan
+    center_gentle_m: 0.06          # kalau pusat robot mulai 10cm dari tengah jalur, koreksi halus balik ke tengah
+    center_sharp_m: 0.18           # kalau sudah 18cm dari tengah jalur, koreksi lebih tegas balik ke centerline
+    lane_correct_deg: 16.0         # koreksi tajam lebih cepat aktif di tikungan supaya tidak melebar/mepet
+    corridor_straight_deadband_deg: 8.0  # deadband dipersempit: robot lebih cepat sadar kalau mulai keluar arah jalur
+    corridor_straight_deadband_cross_track_m: 0.05  # deadband posisi dipersempit supaya tetap di dalam pita hijau, tidak dibiarkan drift terlalu jauh
+    # TEMPORARY diagnostic (2026-09-30): dinaikkan ke 1.0 (full power terus,
+    # tidak ada jeda netral 127 sama sekali) buat memastikan tuntas apakah
+    # macet berulang di titik 1->2 itu murni fisik atau masih ada sangkut-
+    # paut dengan pulsing kecepatan. Kalau tetap macet di titik yang sama
+    # walau full power nonstop, itu bukti pasti 100% bukan software. Turunkan
+    # lagi ke 0.62 setelah diagnostic ini selesai kalau memang bukan penyebabnya.
+    drive_speed_duty: 1.0         # DIAGNOSTIC ONLY -- lihat komentar di atas, biasanya 0.62
+    # Dinaikkan dari 0.20 -- user konfirmasi lihat langsung robotnya BERHENTI
+    # TOTAL (bukan cuma lambat) di tengah jalan lurus biasa, lalu baru
+    # mundur beberapa detik kemudian (stall-check). Di period 0.20s, tiap
+    # "nyala" cuma ~0.12 detik sebelum netral lagi -- kalau di titik itu
+    # butuh sedikit lebih banyak tenaga/waktu buat benar-benar mulai
+    # bergerak, jeda netral yang sesering itu bisa bikin momentumnya
+    # keburu abis lagi sebelum sempat kebentuk, jadi robotnya diam terus
+    # walau byte forward tetap terkirim tiap tick. Period lebih panjang
+    # (0.60s) -- rasio ON/OFF (drive_speed_duty) TIDAK berubah, cuma jadi
+    # "nyala" ~0.37 detik sekali jalan (bukan 0.12 detik) -- kasih waktu
+    # jauh lebih banyak buat beneran membangun gerakan sebelum jeda netral
+    # berikutnya.
+    drive_speed_pulse_period_s: 0.60
+    # Khusus pas lagi di tikungan beneran (path_is_turning) -- lebih pelan +
+    # lebih cepat sadar melenceng, supaya sempat koreksi tegas dikit-dikit
+    # balik ke tengah pita hijau sebelum kebablasan ke luar tikungan. Jalan
+    # lurus tetap pakai drive_speed_duty/lane_correct_deg/center_sharp_m di atas.
+    curve_drive_speed_duty: 0.42
+    curve_lane_correct_deg: 9.0
+    curve_center_sharp_m: 0.10
+    spin_correct_deg: 50.0         # ambang tikungan tajam: satu roda netral, roda luar maju; turun lagi ke SHARP/GENTLE/STRAIGHT saat arah depan sudah lurus
+
+    # --- Penghalusan jalur: belokan halus dibikin kurva, belokan tajam dibiarin ---
+    # Diterapkan sekali pas "2D Goal Pose" diklik, gantiin titik mentah
+    # hasil klik dengan versi yang lebih rapat/halus. Bukan spline
+    # penuh -- cuma lengkungan quadratic-Bezier di tiap sudut yang lebih
+    # landai dari sharp_turn_threshold_deg, sudut yang beneran tajam
+    # dibiarin apa adanya (tetap belok tajam beneran).
+    sharp_turn_threshold_deg: 140.0 # belokan biasa/90 derajat dibulatkan jadi kurva; pivot tengah jalur dimatikan di pelcdx
+    corner_round_fraction: 0.45     # tikungan dibuat lebih panjang/halus supaya setelah belok cepat kembali mengikuti jalur lurus
+    corner_round_points: 16         # jumlah titik sampling di tiap lengkungan sudut yang dihaluskan -- dinaikkan dari 6, biar patokan garis-lurus-per-segmen jauh lebih deket ke bentuk lengkung aslinya, jadi cross_track gak goyang besar pas nikung padahal robotnya udah ngikutin lengkungan dengan benar

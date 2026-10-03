@@ -1,0 +1,21 @@
+[1.353s] Invoking command in '/home/lattepanda/Robot magang/pelcdx': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lattepanda/Robot magang/pelcdx/build/pelcdx/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/pelcdx build --build-base /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build install --record /home/lattepanda/Robot magang/pelcdx/build/pelcdx/install.log --single-version-externally-managed install_data
+[1.790s] running egg_info
+[1.824s] writing build/pelcdx/pelcdx.egg-info/PKG-INFO
+[1.826s] writing dependency_links to build/pelcdx/pelcdx.egg-info/dependency_links.txt
+[1.826s] writing entry points to build/pelcdx/pelcdx.egg-info/entry_points.txt
+[1.826s] writing requirements to build/pelcdx/pelcdx.egg-info/requires.txt
+[1.826s] writing top-level names to build/pelcdx/pelcdx.egg-info/top_level.txt
+[1.895s] reading manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+[1.896s] writing manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+[1.902s] running build
+[1.902s] running build_py
+[1.903s] running install
+[1.912s] running install_lib
+[1.949s] running install_data
+[1.950s] running install_egg_info
+[1.986s] removing '/home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx-0.1.0-py3.12.egg-info' (and everything under it)
+[1.986s] Copying build/pelcdx/pelcdx.egg-info to /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx-0.1.0-py3.12.egg-info
+[1.989s] running install_scripts
+[2.207s] Installing manual_waypoint_driver_node script to /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/pelcdx
+[2.209s] writing list of installed files to '/home/lattepanda/Robot magang/pelcdx/build/pelcdx/install.log'
+[2.262s] Invoked command in '/home/lattepanda/Robot magang/pelcdx' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/lattepanda/Robot magang/pelcdx/build/pelcdx/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/pelcdx build --build-base /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build install --record /home/lattepanda/Robot magang/pelcdx/build/pelcdx/install.log --single-version-externally-managed install_data

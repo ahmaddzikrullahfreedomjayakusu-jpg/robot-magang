@@ -59,10 +59,39 @@ MOTOR_REVERSE = MOTOR_NEUTRAL + MOTOR_STEP            # 157
 MOTOR_FORWARD_SLOW = MOTOR_NEUTRAL - 20               # 107, gentle-turn slowed side
 MOTOR_FORWARD_VERY_SLOW = MOTOR_NEUTRAL - 10          # 117, sharp-turn slowed side
 MOTOR_REVERSE_SLOW = MOTOR_NEUTRAL + 15               # 142, slowed-side reverse-with-turn (same value robotmaganglidar1.py's own trapped-escape maneuver uses)
-SPIN_LEFT = (MOTOR_REVERSE, MOTOR_FORWARD)    # (kiri, kanan) -- spin left/CCW
-SPIN_RIGHT = (MOTOR_FORWARD, MOTOR_REVERSE)   # (kiri, kanan) -- spin right/CW
+SPIN_LEFT = (MOTOR_REVERSE, MOTOR_FORWARD)    # (kiri, kanan) -- spin left/CCW, TURNING state's mission-start/U-turn pivot only (see _do_turning)
+SPIN_RIGHT = (MOTOR_FORWARD, MOTOR_REVERSE)   # (kiri, kanan) -- spin right/CW, TURNING state's mission-start/U-turn pivot only
+# TURNING state's pivot for a mid-route hard corner (current_index != 0,
+# see _do_turning) -- one wheel fully stopped (neutral) instead of
+# reversed, the other still driving forward: pivots around the stopped
+# wheel's contact point, tight enough without ever reversing, and never
+# a jarring both-wheels-neutral pause before it starts (no reverse means
+# no moment where the robot looks like it's backing up either).
+PIVOT_LEFT = (MOTOR_NEUTRAL, MOTOR_FORWARD)    # (kiri, kanan) -- pivot left, left wheel stopped
+PIVOT_RIGHT = (MOTOR_FORWARD, MOTOR_NEUTRAL)   # (kiri, kanan) -- pivot right, right wheel stopped
 REVERSE_ARC_LEFT = (MOTOR_REVERSE, MOTOR_REVERSE_SLOW)   # (kiri, kanan) -- back off curving left
 REVERSE_ARC_RIGHT = (MOTOR_REVERSE_SLOW, MOTOR_REVERSE)  # (kiri, kanan) -- back off curving right
+# _do_driving's own "SPIN" correction level (extreme mid-route deviation)
+# used to reuse SPIN_LEFT/SPIN_RIGHT above verbatim -- one wheel actually
+# in reverse, same as a genuine stop-and-pivot. Live testing found that
+# looks/feels exactly like the robot stopping mid-drive before it
+# corrects, which is not what continuous lane-following should do. This
+# crawl value keeps the inner wheel barely, but still, net FORWARD (never
+# reverses) -- less turning authority than a true pivot, but the robot
+# never stops translating while it corrects.
+MOTOR_FORWARD_CRAWL = MOTOR_NEUTRAL - 2               # 125, drive-time "SPIN" inner wheel -- tightest turn that still never reverses
+# Widening the SPIN differential further without ever reversing a wheel
+# means the OUTSIDE wheel has to go faster than the standard cruise speed
+# (MOTOR_FORWARD/97) instead -- the inside wheel (crawl/125) is already
+# as close to a dead stop as it can get without reversing, no more room
+# there. This is untested territory (MOTOR_FORWARD has been the fastest
+# forward byte used anywhere in this file until now) -- kept as its own
+# named constant, used ONLY for _do_driving's SPIN level (gated to
+# confirmed sharp bends via path_is_turning), so a bad value can't affect
+# normal cruising speed anywhere else.
+MOTOR_FORWARD_FAST = MOTOR_NEUTRAL - 40               # 87, drive-time "SPIN" outer wheel -- wider differential than crawl+cruise alone gave (confirmed too little: cross_track overshot to 0.55m, then 0.33m+, in two live tests)
+DRIVE_SPIN_LEFT = (MOTOR_FORWARD_CRAWL, MOTOR_FORWARD_FAST)    # (kiri, kanan) -- _do_driving's SPIN_LEFT only
+DRIVE_SPIN_RIGHT = (MOTOR_FORWARD_FAST, MOTOR_FORWARD_CRAWL)   # (kiri, kanan) -- _do_driving's SPIN_RIGHT only
 
 
 def yaw_from_quaternion(q: Quaternion) -> float:
@@ -95,12 +124,30 @@ def sector_min_range(scan: LaserScan, center_deg: float, half_width_deg: float) 
     return best
 
 
+@dataclass
+class LaneContext:
+    """Robot pose + current path segment, in the map frame -- passed to
+    nearest_in_side_zone so it can tell "close to the robot" apart from
+    "close to the robot AND actually inside the marked green corridor".
+    """
+    robot_x: float
+    robot_y: float
+    robot_yaw: float
+    seg_sx: float
+    seg_sy: float
+    seg_dx: float
+    seg_dy: float
+    seg_len: float
+    half_width_m: float
+
+
 def nearest_in_side_zone(
     scan: LaserScan,
     side: str,
     radius: float,
     min_points: int = 1,
     cone_half_deg: float = 90.0,
+    lane: Optional[LaneContext] = None,
 ) -> float:
     """Nearest range on `side` ('left' or 'right') of the robot within
     `radius` -- same Cartesian (x,y) classification as robotpel's
@@ -115,6 +162,15 @@ def nearest_in_side_zone(
     doesn't trigger a swerve. `min_points` requires that many confirming
     rays (not just one stray reflection/speck) before counting as a real
     detection, same anti-noise reasoning as sector_wall_fraction.
+
+    `lane`, if given, additionally requires the ray's actual hit point
+    (converted to the map frame) to fall inside the marked green
+    corridor before it counts. The route was already drawn to go around
+    whatever's outside it (a wall on the far side of a bend, furniture
+    past the lane edge, etc.) -- reacting to that too means swerving away
+    from things the path never intended to pass close to in the first
+    place. Live testing found the robot needlessly correcting off-course
+    for exactly this.
     """
     want_left = side == "left"
     cone_half = math.radians(cone_half_deg)
@@ -129,9 +185,18 @@ def nearest_in_side_zone(
             if abs(bf_angle) <= cone_half and (
                 (want_left and y > 0.0) or (not want_left and y < 0.0)
             ):
-                count += 1
-                if r < best:
-                    best = r
+                in_lane = True
+                if lane is not None and lane.seg_len > 1e-3:
+                    wx = lane.robot_x + x * math.cos(lane.robot_yaw) - y * math.sin(lane.robot_yaw)
+                    wy = lane.robot_y + x * math.sin(lane.robot_yaw) + y * math.cos(lane.robot_yaw)
+                    point_cross_track = (
+                        lane.seg_dx * (wy - lane.seg_sy) - lane.seg_dy * (wx - lane.seg_sx)
+                    ) / lane.seg_len
+                    in_lane = abs(point_cross_track) <= lane.half_width_m
+                if in_lane:
+                    count += 1
+                    if r < best:
+                        best = r
         angle += scan.angle_increment
     if count < min_points:
         return float("inf")
@@ -220,6 +285,13 @@ class ManualWaypointDriverNode(Node):
         self.declare_parameter("scan_topic", "/scan_filtered")
         self.declare_parameter("clicked_point_topic", "/clicked_point")
         self.declare_parameter("start_trigger_topic", "/goal_pose")
+        # RViz "2D Pose Estimate" -- manually repositioning the robot
+        # mid-mission (physically moved it, or nudging AMCL back on
+        # track). Without reacting to this, the robot keeps targeting
+        # whatever waypoint index it was already on, which -- if that
+        # point is now behind the new position -- means turning around
+        # and backtracking to it instead of continuing toward the goal.
+        self.declare_parameter("initial_pose_topic", "/initialpose")
         self.declare_parameter("global_frame", "map")
         # Marking the same path by hand every single test run got old
         # fast. The raw clicked points (before smoothing) are saved here
@@ -289,6 +361,30 @@ class ManualWaypointDriverNode(Node):
         # a couple of stray points off a window frame shouldn't carry the
         # same weight as a sector genuinely packed with real wall.
         self.declare_parameter("front_wall_min_valid_rays", 5)
+        # How much more open one side must read than the other (using
+        # the same diag_left/diag_right side-zone readings obstacle
+        # avoidance already computes) before a front obstacle triggers a
+        # dodge instead of a plain pause. Keeps an ordinary narrow
+        # corridor (both sides similarly close -- not a real gap to
+        # dodge into) correctly falling through to pausing rather than
+        # forcing an arbitrary swerve toward whichever side reads a
+        # hair closer, while a real asymmetric obstacle (clearly more
+        # room on one side) gets routed around instead of just stopped for.
+        self.declare_parameter("front_side_steer_margin_m", 0.15)
+        # The chosen side's clearance must ALSO be at least this much
+        # beyond the robot's own half-width -- being "more open than the
+        # other side" isn't enough on its own if that side still isn't
+        # actually wide enough for the robot's body to fit through.
+        self.declare_parameter("front_dodge_clearance_margin_m", 0.15)
+        # A front dodge commits to ONE fixed heading offset and holds it
+        # until reached (or front_dodge_timeout_s runs out), instead of
+        # re-deciding fresh every 0.1s tick while the obstacle stays in
+        # view -- re-deciding every tick kept holding SHARP for as long
+        # as something was detected ahead, overshooting well past where
+        # it actually needed to turn ("kebablasan"). A bounded turn-then-
+        # straighten-out maneuver instead.
+        self.declare_parameter("front_dodge_deg", 20.0)
+        self.declare_parameter("front_dodge_timeout_s", 3.0)
         # Resuming used to re-check against the exact same threshold that
         # triggered the pause -- with a marked path that grazes close to a
         # wall/corner, the front reading sits right on that boundary and
@@ -330,12 +426,36 @@ class ManualWaypointDriverNode(Node):
         self.declare_parameter("side_confirm_points", 2)  # far zone needs this many confirming rays, not just one
         self.declare_parameter("side_cone_half_deg", 60.0)  # far zone only looks within this cone of dead-ahead
         self.declare_parameter("veer_sharp_m", 0.38)  # inside this, either zone -> sharp (stop the inside wheel)
+        # Narrow corridor with something on both sides: only actually
+        # steer toward one side if it's this much closer than the other,
+        # otherwise treat it as already centered and go straight (see
+        # its use in _do_driving for why -- fixes zigzag in narrow spots).
+        self.declare_parameter("side_center_margin_m", 0.15)
         self.declare_parameter("veer_commit_seconds", 0.4)  # hold a committed veer level this long before relaxing
         # Cross-track ("stay inside the green corridor") correction.
         # Bias term added to heading error, same formula
         # coverage_planner_node's lane-correction used.
         self.declare_parameter("cross_track_gain", 0.35)  # was 0.6 -> 0.4 -> 0.35 -- softer pull, jumping straight to a hard correction was overshooting past the corridor
+        # How far ahead along the path the turn-angle reference looks
+        # (see _lookahead_point) -- aiming at just the immediate segment
+        # (a few cm, post-smoothing) chased every tiny kink of a curve
+        # instead of committing to one clean turn, still clipping the
+        # corner. cross_track itself (lane-edge containment) is untouched.
+        self.declare_parameter("turn_lookahead_m", 0.5)
         self.declare_parameter("lane_correct_deg", 18.0)  # was 8.0 -> 10.0 -> 18.0 -- much wider GENTLE-only zone, SHARP now reserved for genuinely large deviations instead of triggering early
+        # Live testing on short curve segments (corner smoothing) found the
+        # robot flip-flopping GENTLE/SHARP LEFT<->RIGHT every tick while
+        # already within a few cm of the line -- heading_error jittering
+        # across zero close to the old 0.3x deadband was enough to keep
+        # re-triggering a fresh correction on the opposite side every time,
+        # since _commit_level only holds a side once committed, it doesn't
+        # delay picking a NEW opposite side. Widening the "just go straight"
+        # zone (independent of lane_correct_deg itself) stops that chatter
+        # without touching obstacle-avoidance's own reaction speed.
+        self.declare_parameter("corridor_straight_deadband_deg", 8.0)
+        # Guard so the deadband above only ever absorbs near-center jitter,
+        # never a genuine sustained drift (see comment at its use site).
+        self.declare_parameter("corridor_straight_deadband_cross_track_m", 0.10)
         # SHARP only slows the inside wheel (still both wheels driving
         # forward) -- live testing found that's not enough turning
         # authority once the deviation is already huge (over a meter off
@@ -362,6 +482,7 @@ class ManualWaypointDriverNode(Node):
         self.scan_topic = str(self.get_parameter("scan_topic").value)
         self.clicked_point_topic = str(self.get_parameter("clicked_point_topic").value)
         self.start_trigger_topic = str(self.get_parameter("start_trigger_topic").value)
+        self.initial_pose_topic = str(self.get_parameter("initial_pose_topic").value)
         self.global_frame = str(self.get_parameter("global_frame").value)
         self.saved_waypoints_file = str(self.get_parameter("saved_waypoints_file").value)
         self.waypoint_tolerance_m = float(self.get_parameter("waypoint_tolerance_m").value)
@@ -381,6 +502,10 @@ class ManualWaypointDriverNode(Node):
         self.front_sector_deg = float(self.get_parameter("front_sector_deg").value)
         self.wall_confirm_fraction = float(self.get_parameter("wall_confirm_fraction").value)
         self.front_wall_min_valid_rays = int(self.get_parameter("front_wall_min_valid_rays").value)
+        self.front_side_steer_margin_m = float(self.get_parameter("front_side_steer_margin_m").value)
+        self.front_dodge_clearance_margin_m = float(self.get_parameter("front_dodge_clearance_margin_m").value)
+        self.front_dodge_deg = float(self.get_parameter("front_dodge_deg").value)
+        self.front_dodge_timeout_s = float(self.get_parameter("front_dodge_timeout_s").value)
         self.front_clear_margin_m = float(self.get_parameter("front_clear_margin_m").value)
         self.robot_half_width = float(self.get_parameter("robot_half_width").value)
         self.robot_width = float(self.get_parameter("robot_width").value)
@@ -389,9 +514,13 @@ class ManualWaypointDriverNode(Node):
         self.side_confirm_points = int(self.get_parameter("side_confirm_points").value)
         self.side_cone_half_deg = float(self.get_parameter("side_cone_half_deg").value)
         self.veer_sharp_m = float(self.get_parameter("veer_sharp_m").value)
+        self.side_center_margin_m = float(self.get_parameter("side_center_margin_m").value)
         self.veer_commit_seconds = float(self.get_parameter("veer_commit_seconds").value)
         self.cross_track_gain = float(self.get_parameter("cross_track_gain").value)
+        self.turn_lookahead_m = float(self.get_parameter("turn_lookahead_m").value)
         self.lane_correct_deg = float(self.get_parameter("lane_correct_deg").value)
+        self.corridor_straight_deadband_deg = float(self.get_parameter("corridor_straight_deadband_deg").value)
+        self.corridor_straight_deadband_cross_track_m = float(self.get_parameter("corridor_straight_deadband_cross_track_m").value)
         self.spin_correct_deg = float(self.get_parameter("spin_correct_deg").value)
         self.sharp_turn_threshold_deg = float(self.get_parameter("sharp_turn_threshold_deg").value)
         self.corner_round_fraction = float(self.get_parameter("corner_round_fraction").value)
@@ -401,6 +530,7 @@ class ManualWaypointDriverNode(Node):
         self.create_subscription(LaserScan, self.scan_topic, self.on_scan, 10)
         self.create_subscription(PointStamped, self.clicked_point_topic, self.on_clicked_point, 10)
         self.create_subscription(PoseStamped, self.start_trigger_topic, self.on_start_trigger, 10)
+        self.create_subscription(PoseWithCovarianceStamped, self.initial_pose_topic, self.on_initial_pose_estimate, 10)
 
         self.motor_pub = self.create_publisher(Int16MultiArray, "/motor_rpm", 10)
         self.path_viz_pub = self.create_publisher(Marker, "/manual_waypoints/path_marker", 10)
@@ -409,6 +539,10 @@ class ManualWaypointDriverNode(Node):
         self.current_pose: Optional[Tuple[float, float, float]] = None
         self.latest_scan: Optional[LaserScan] = None
         self.waypoints: List[Waypoint] = []
+        # The raw (pre-smoothing) points behind the current/most recent
+        # mission -- kept so a "2D Goal Pose" click after FINISHED can
+        # repeat the same path without needing every point re-marked.
+        self._last_raw_waypoints: List[Waypoint] = []
         self.current_index = 0
         self.state = DriveState.WAITING_POINTS
         self._state_entered_at = time.monotonic()
@@ -430,6 +564,12 @@ class ManualWaypointDriverNode(Node):
         # repeated attempts try both sides instead of grinding the same
         # direction against whatever it's wedged on.
         self._reverse_arc_left = True
+        # A front-obstacle dodge in progress: (side, target_yaw,
+        # started_at) or None. See _do_driving's front_wall_confirmed
+        # handling -- a bounded one-shot turn, not a per-tick decision.
+        self._front_dodge_side: Optional[str] = None
+        self._front_dodge_target_yaw: Optional[float] = None
+        self._front_dodge_started_at = 0.0
         # True right after loading a saved path at startup, until the
         # first fresh "Publish Point" click either keeps it (by starting
         # to drive) or discards it (by marking a new path instead).
@@ -483,10 +623,30 @@ class ManualWaypointDriverNode(Node):
         # on purpose -- it's only ever used here as a "start now" signal,
         # not as an extra waypoint.
         if self.state != DriveState.WAITING_POINTS:
+            # Already driving/turning/paused/stuck/finished -- treat
+            # another "2D Goal Pose" click as a manual reset: abort
+            # whatever's happening right now and repeat the exact same
+            # marked path from scratch (from the saved RAW points, so
+            # re-smoothing doesn't compound on an already-smoothed
+            # result). Used to only work once the mission had fully
+            # FINISHED; now works from a stall/pause/mid-drive too, so
+            # retrying after nudging the robot back with "2D Pose
+            # Estimate" doesn't need re-marking every point or a node
+            # restart.
+            if not self._last_raw_waypoints:
+                self.get_logger().warn("Start triggered again but there's no previous path to repeat -- ignoring.")
+                return
+            self.waypoints = [Waypoint(x=w.x, y=w.y) for w in self._last_raw_waypoints]
+            self.get_logger().info(f"Restarting the same {len(self.waypoints)}-point path from the start.")
+            self._start_mission()
             return
         if not self.waypoints:
             self.get_logger().warn("Start triggered but no waypoints marked yet -- ignoring.")
             return
+        self._start_mission()
+
+    def _start_mission(self) -> None:
+        self._last_raw_waypoints = [Waypoint(x=w.x, y=w.y) for w in self.waypoints]
         self._save_waypoints(self.waypoints)
         if self.current_pose is not None:
             self._mission_start_xy = (self.current_pose[0], self.current_pose[1])
@@ -499,7 +659,58 @@ class ManualWaypointDriverNode(Node):
             f"Starting: driving {raw_count} marked point(s), smoothed into {len(self.waypoints)} -- "
             "gentle bends rounded into a curve, sharp turns kept as-is."
         )
-        self._enter(DriveState.TURNING)
+        # Mission start specifically (not the end-of-path U-turn below,
+        # which still gets a real pivot -- it needs one) skips the
+        # stop-and-reverse-pivot entirely and goes straight into DRIVING
+        # instead: explicit instruction was no backing-up-in-place right
+        # at the start, just ease onto the line with the same gradual
+        # GENTLE/SHARP correction (+ start_straight_seconds grace) used
+        # the rest of the way, never reversing a wheel.
+        self._enter(DriveState.DRIVING)
+
+    def on_initial_pose_estimate(self, msg: PoseWithCovarianceStamped) -> None:
+        """RViz "2D Pose Estimate" mid-mission -- the robot was manually
+        repositioned (physically moved, or AMCL nudged back on track).
+        current_index doesn't otherwise change on its own, so without
+        this the robot would keep targeting whatever point it was
+        already on -- if that's now behind the new position, it turns
+        around and backtracks to it instead of continuing toward the
+        goal. Snap current_index to the nearest point ahead of the new
+        heading on the CURRENT path (works the same on the return leg,
+        once it's reversed) so it just continues on from there -- plain
+        nearest-by-distance isn't enough on its own, since the closest
+        point overall can easily be one already behind the robot (e.g.
+        just past it along a curve), which would have it driving
+        backward to reach it instead. "2D Pose Estimate" is a
+        click-and-drag in RViz, so its own orientation is a real signal
+        for which way the robot is now facing -- only points in that
+        forward half-plane are considered.
+        """
+        if self.state not in (
+            DriveState.TURNING, DriveState.DRIVING, DriveState.PAUSED_OBSTACLE, DriveState.REVERSING
+        ):
+            return
+        if not self.waypoints:
+            return
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        yaw = yaw_from_quaternion(msg.pose.pose.orientation)
+        fwd_x, fwd_y = math.cos(yaw), math.sin(yaw)
+        ahead = [
+            i for i in range(len(self.waypoints))
+            if (self.waypoints[i].x - x) * fwd_x + (self.waypoints[i].y - y) * fwd_y > 0.0
+        ]
+        candidates = ahead if ahead else range(len(self.waypoints))
+        nearest_index = min(
+            candidates,
+            key=lambda i: math.hypot(self.waypoints[i].x - x, self.waypoints[i].y - y),
+        )
+        self.current_index = nearest_index
+        self.get_logger().info(
+            f"Repositioned via '2D Pose Estimate' -- resuming from the nearest point ahead on the path "
+            f"({nearest_index + 1}/{len(self.waypoints)}) instead of backtracking."
+        )
+        self._enter(DriveState.DRIVING)
 
     def _load_saved_waypoints(self) -> None:
         path = self.saved_waypoints_file
@@ -632,6 +843,54 @@ class ManualWaypointDriverNode(Node):
         prev = self.waypoints[self.current_index - 1]
         return (prev.x, prev.y)
 
+    def _lookahead_point(self, lookahead_m: float) -> Tuple[float, float]:
+        """Walk forward from the robot's current position along the
+        remaining marked/smoothed path, accumulating distance, and
+        return the point at least lookahead_m ahead (interpolated on the
+        segment where it's crossed). Falls back to the final waypoint if
+        the remaining path is shorter than lookahead_m. Used as the
+        heading reference for turning -- see its use in _do_driving.
+
+        Also stops early if the walk's cumulative direction change from
+        its very first step passes sharp_turn_threshold_deg, even short
+        of lookahead_m -- on two real bends close together (a smoothed
+        S-shape, live-tested: two corners only ~1.3m apart), a fixed
+        0.5m walk crossed clean through the first bend into the second,
+        so target_yaw ended up pointing toward the SECOND bend's exit
+        direction while the robot was still only partway through the
+        first. That inflated heading_error well past spin_correct_deg
+        and forced a full SPIN turn the immediate curve never asked
+        for -- looked like the robot spinning past the corner instead
+        of tracing it. No single smoothed bend's own rounding exceeds
+        sharp_turn_threshold_deg (that's exactly the cutoff that keeps
+        it a rounded curve instead of a hard vertex -- see _smooth_path),
+        so capping the cumulative change there lets the walk finish
+        tracing one real bend but stops it from bleeding into the next,
+        separately-angled one.
+        """
+        x, y, _ = self.current_pose
+        px, py = x, y
+        remaining = lookahead_m
+        idx = self.current_index
+        first_heading: Optional[float] = None
+        while idx < len(self.waypoints):
+            wp = self.waypoints[idx]
+            seg_dx, seg_dy = wp.x - px, wp.y - py
+            seg_len = math.hypot(seg_dx, seg_dy)
+            if seg_len > 1e-6:
+                heading = math.atan2(seg_dy, seg_dx)
+                if first_heading is None:
+                    first_heading = heading
+                elif abs(math.degrees(normalize_angle(heading - first_heading))) > self.sharp_turn_threshold_deg:
+                    return (px, py)
+            if seg_len >= remaining:
+                frac = (remaining / seg_len) if seg_len > 1e-6 else 0.0
+                return (px + seg_dx * frac, py + seg_dy * frac)
+            remaining -= seg_len
+            px, py = wp.x, wp.y
+            idx += 1
+        return (px, py)
+
     # ------------------------------------------------------------------
     # State machine
     # ------------------------------------------------------------------
@@ -647,6 +906,8 @@ class ManualWaypointDriverNode(Node):
             # curve points never re-enter DRIVING (see control_loop), so
             # this does NOT reset mid-curve -- only after an actual stop.
             self._veer_commit = {"level": "STRAIGHT", "until": 0.0}
+            self._front_dodge_side = None
+            self._front_dodge_target_yaw = None
             # Fresh stall-detection checkpoint every time real driving
             # (re-)starts -- an obstacle pause/reverse-escape stopping
             # briefly for a legitimate reason shouldn't count against it.
@@ -754,18 +1015,31 @@ class ManualWaypointDriverNode(Node):
                 self.get_logger().info("All marked waypoints reached -- done.")
                 return
 
-            # Never stop mid-route, not even at a real sharp corner --
-            # live testing showed stopping to pivot in place at every
-            # sharp bend along the way looked like the robot randomly
-            # freezing. Only the initial pivot (on_start_trigger, before
-            # any driving starts) and the final point (end-of-path
-            # turn-around above) still stop; every other point -- hard
-            # corner or smoothing curve alike -- just keeps flowing
-            # toward the next one, relying on corridor correction
-            # (including the SPIN tier for genuinely sharp turns) to
-            # actually make the turn while still moving. Re-loop to
-            # re-check distance against the new target instead of waiting
-            # a full 0.1s tick.
+            if reached_hard_corner:
+                # A genuinely sharp corner (turn_deg >= sharp_turn_threshold_deg
+                # in _smooth_path, so this point was kept as a real vertex,
+                # not rounded into a curve) pivots to face the next point
+                # precisely -- turn by the one calculated angle (via
+                # DriveState.TURNING/_do_turning, which for a mid-route
+                # corner like this pivots with one wheel stopped rather
+                # than reversed -- see _do_turning), then resume straight/
+                # normal driving. No neutral-both-wheels pause first --
+                # goes straight into the pivot. Continuously re-steering
+                # through a real sharp bend while still moving (the old
+                # approach here) was live-tested and repeatedly found not
+                # to keep up: even the strongest correction level active
+                # the whole time still let cross_track grow unchecked
+                # (0.55m, 0.74m in separate tests) instead of converging.
+                # Only mid-route sharp corners do this -- smoothed curve
+                # points (hard_corner=False, gentle bends) still never stop.
+                self._enter(DriveState.TURNING)
+                return
+
+            # Smoothed curve points (hard_corner=False, gentle bends) never
+            # stop -- stopping to pivot at every point of a rounded curve
+            # (they can be a few cm apart) looked like stuttering, not one
+            # continuous turn. Re-loop to re-check distance against the
+            # new target instead of waiting a full 0.1s tick.
 
         if self.state == DriveState.TURNING:
             self._do_turning(dx, dy)
@@ -777,10 +1051,18 @@ class ManualWaypointDriverNode(Node):
             self._do_reversing()
 
     def _do_turning(self, dx: float, dy: float) -> None:
-        """Pivot in place to face the next waypoint -- odometry decides
-        when the target bearing is reached (same approach as
+        """Pivot to face the next waypoint -- odometry decides when the
+        target bearing is reached (same approach as
         coverage_planner_node's _pivot_done: a fixed timer can't reliably
         hit a precise angle), with a time ceiling as a safety net.
+
+        Mission-start and the end-of-path U-turn (current_index == 0 when
+        this state is entered, see _enter/_start_mission/control_loop)
+        use the full reverse-wheel SPIN_LEFT/SPIN_RIGHT pivot -- live-
+        tested and confirmed good there. A mid-route hard corner
+        (current_index != 0) uses PIVOT_LEFT/PIVOT_RIGHT instead (one
+        wheel stopped, not reversed) -- explicit preference: no reversing
+        for these, one stopped wheel already turns tightly enough.
         """
         elapsed = time.monotonic() - self._state_entered_at
         target_yaw = math.atan2(dy, dx)
@@ -791,7 +1073,10 @@ class ManualWaypointDriverNode(Node):
             self._enter(DriveState.DRIVING)
             return
 
-        kiri, kanan = SPIN_LEFT if heading_error > 0 else SPIN_RIGHT
+        if self.current_index == 0:
+            kiri, kanan = SPIN_LEFT if heading_error > 0 else SPIN_RIGHT
+        else:
+            kiri, kanan = PIVOT_LEFT if heading_error > 0 else PIVOT_RIGHT
         self._publish_motor(kiri, kanan)
 
     def _do_driving(self, dx: float, dy: float) -> None:
@@ -872,44 +1157,128 @@ class ManualWaypointDriverNode(Node):
             "SPIN_LEFT": 3, "SPIN_RIGHT": 3,
         }
 
-        # --- (2) side-obstacle desired level ---
+        # --- (2) corridor cross-track geometry -- computed first since
+        # the obstacle check below needs it to tell "close to the robot"
+        # apart from "close to the robot AND inside the green corridor" ---
+        sx, sy = self._segment_start_xy()
+        seg_dx = (x + dx) - sx  # target.x - sx
+        seg_dy = (y + dy) - sy  # target.y - sy
+        seg_len = math.hypot(seg_dx, seg_dy)
+        half_corridor_m = self.robot_width / 2.0
+        if seg_len < 1e-3:
+            cross_track = 0.0
+        else:
+            # +cross_track = robot is to the LEFT of the line (REP-103).
+            cross_track = (seg_dx * (y - sy) - seg_dy * (x - sx)) / seg_len
+        lane_ctx = LaneContext(x, y, yaw, sx, sy, seg_dx, seg_dy, seg_len, half_corridor_m)
+
+        # Heading reference for turning uses a LOOKAHEAD point (walked
+        # forward along the remaining path, see _lookahead_point) instead
+        # of the immediate segment's own direction. corner_round_points
+        # now packs a curve with many close-together points -- aiming at
+        # just the very next one made the robot chase each tiny kink
+        # instead of committing to the turn, still clipping the corner.
+        # Aiming further ahead makes it settle on one clean turn angle
+        # toward where the path is actually going. cross_track above is
+        # untouched (still the immediate segment) so lane-edge containment
+        # keeps working exactly as before -- only the turn ANGLE reference
+        # changes, not how far off-line counts as a problem.
+        look_x, look_y = self._lookahead_point(self.turn_lookahead_m)
+        look_dx, look_dy = look_x - x, look_y - y
+        if math.hypot(look_dx, look_dy) < 1e-3:
+            target_yaw = math.atan2(dy, dx)
+        else:
+            target_yaw = math.atan2(look_dy, look_dx)
+
+        # Is the PATH itself genuinely bending here (lookahead direction
+        # meaningfully different from the immediate segment's own
+        # direction), or is this basically a straight stretch where the
+        # robot has just drifted sideways? Used below to keep SPIN
+        # (strong correction, and -- since it keeps translating forward,
+        # not a true in-place pivot -- prone to overshooting past center)
+        # reserved for real bends the marked path calls for, instead of
+        # firing on pure cross-track drift and swinging the heading past
+        # spin_correct_deg on its own, which fed back into re-triggering
+        # SPIN the other way (live-tested: growing oscillation on an
+        # otherwise-straight stretch).
+        seg_yaw = math.atan2(seg_dy, seg_dx) if seg_len > 1e-3 else target_yaw
+        path_is_turning = abs(math.degrees(normalize_angle(target_yaw - seg_yaw))) > self.sharp_turn_threshold_deg
+
+        # --- (3) side-obstacle desired level ---
+        # Both side_right/side_left (close-range side_close_m) AND
+        # diag_right_lane/diag_left_lane (wider early-warning cone) are
+        # lane-filtered -- per explicit instruction, anything outside the
+        # marked green corridor is ignored entirely, no distance-based
+        # exception. diag_right/diag_left (UNfiltered) are kept only for
+        # front-dodge steer-side selection further down, which needs real
+        # physical clearance regardless of the drawn lane to avoid
+        # steering into something just because it's technically "outside".
         obstacle_level = "STRAIGHT"
         side_right = side_left = diag_right = diag_left = float("inf")
+        diag_right_lane = diag_left_lane = float("inf")
+        lidar_confirmed_centered = False
         if self.latest_scan is not None:
-            side_right = nearest_in_side_zone(self.latest_scan, "right", self.side_close_m)
-            side_left = nearest_in_side_zone(self.latest_scan, "left", self.side_close_m)
+            side_right = nearest_in_side_zone(self.latest_scan, "right", self.side_close_m, lane=lane_ctx)
+            side_left = nearest_in_side_zone(self.latest_scan, "left", self.side_close_m, lane=lane_ctx)
             diag_right = nearest_in_side_zone(
                 self.latest_scan, "right", self.side_avoid_radius_m, self.side_confirm_points, self.side_cone_half_deg
             )
             diag_left = nearest_in_side_zone(
                 self.latest_scan, "left", self.side_avoid_radius_m, self.side_confirm_points, self.side_cone_half_deg
             )
-            if side_right < self.side_close_m or diag_right < self.veer_sharp_m:
-                obstacle_level = "SHARP_LEFT"
-            elif diag_right < self.side_avoid_radius_m:
-                obstacle_level = "GENTLE_LEFT"
-            elif side_left < self.side_close_m or diag_left < self.veer_sharp_m:
-                obstacle_level = "SHARP_RIGHT"
-            elif diag_left < self.side_avoid_radius_m:
-                obstacle_level = "GENTLE_RIGHT"
+            diag_right_lane = nearest_in_side_zone(
+                self.latest_scan, "right", self.side_avoid_radius_m, self.side_confirm_points,
+                self.side_cone_half_deg, lane_ctx,
+            )
+            diag_left_lane = nearest_in_side_zone(
+                self.latest_scan, "left", self.side_avoid_radius_m, self.side_confirm_points,
+                self.side_cone_half_deg, lane_ctx,
+            )
+            # Narrow-corridor centering: pick whichever side is genuinely
+            # WORSE, not just "check right first, only look at left if
+            # right happened to pass". The old right-first priority chain
+            # meant that in a narrow corridor with something on BOTH
+            # sides, each side's reading independently wobbling past its
+            # own threshold every tick flip-flopped the decision between
+            # SHARP_LEFT and SHARP_RIGHT -- looked like confused zigzag
+            # turning, live-tested on the way back through a narrow
+            # stretch. Comparing both sides and only committing to a side
+            # when one is MEANINGFULLY closer than the other (more than
+            # side_center_margin_m apart) means a roughly-symmetric narrow
+            # gap is instead read as "already centered, drive straight
+            # through" -- same idea as front-dodge's own side comparison.
+            right_near = min(side_right, diag_right_lane)
+            left_near = min(side_left, diag_left_lane)
+            if right_near < self.side_avoid_radius_m or left_near < self.side_avoid_radius_m:
+                if abs(right_near - left_near) < self.side_center_margin_m:
+                    obstacle_level = "STRAIGHT"
+                    # Both walls actually seen and roughly equidistant --
+                    # LiDAR itself confirms "centered in a narrow spot"
+                    # right now, a faster/more direct read than AMCL-based
+                    # cross_track. Overrides corridor_level below instead
+                    # of just tying with it, so a noisy/lagging AMCL
+                    # reading can't still force a zigzag correction here.
+                    lidar_confirmed_centered = True
+                elif right_near < left_near:
+                    obstacle_level = "SHARP_LEFT" if right_near < self.veer_sharp_m else "GENTLE_LEFT"
+                else:
+                    obstacle_level = "SHARP_RIGHT" if left_near < self.veer_sharp_m else "GENTLE_RIGHT"
 
-        # --- (3) corridor cross-track desired level ---
-        sx, sy = self._segment_start_xy()
-        seg_dx = (x + dx) - sx  # target.x - sx
-        seg_dy = (y + dy) - sy  # target.y - sy
-        seg_len = math.hypot(seg_dx, seg_dy)
-        if seg_len < 1e-3:
-            target_yaw = math.atan2(dy, dx)
-            cross_track = 0.0
-        else:
-            target_yaw = math.atan2(seg_dy, seg_dx)
-            # +cross_track = robot is to the LEFT of the line (REP-103).
-            cross_track = (seg_dx * (y - sy) - seg_dy * (x - sx)) / seg_len
         # yaw > target_yaw means rotated CCW/left of the line -> need to
         # turn RIGHT to come back (established, tested wheel convention).
         heading_error = normalize_angle(yaw - target_yaw) + normalize_angle(self.cross_track_gain * cross_track)
         deg = math.degrees(heading_error)
-        if abs(deg) < self.lane_correct_deg * 0.3:
+        # The deadband must NOT fire on cross_track_gain alone: a real,
+        # sustained lateral drift (e.g. 0.22m off-line) still only
+        # contributes a few degrees to heading_error once damped by
+        # cross_track_gain (0.35), so without this guard a wide deadband
+        # can mistake "parked 22cm off the green line, heading roughly
+        # parallel to it" for STRAIGHT forever -- live-tested, the robot
+        # sat locked at cross_track=-0.22m never correcting. Requiring
+        # cross_track itself to be small keeps the deadband doing its one
+        # job (absorb heading jitter right at the center line) without
+        # masking genuine drift.
+        if abs(deg) < self.corridor_straight_deadband_deg and abs(cross_track) < self.corridor_straight_deadband_cross_track_m:
             corridor_level = "STRAIGHT"
         elif deg > 0:
             if deg > self.spin_correct_deg:
@@ -928,6 +1297,25 @@ class ManualWaypointDriverNode(Node):
         if self._start_straight_until is not None and time.monotonic() < self._start_straight_until:
             corridor_level = "STRAIGHT"
 
+        # Reserve SHARP/SPIN (from the ANGLE-based classification above)
+        # for a real bend in the marked path (path_is_turning) -- on a
+        # straight-ish stretch, cap it at GENTLE instead, however far
+        # heading_error alone would otherwise push it. This must happen
+        # BEFORE the distance-based escalation below merges in: capping
+        # the merged result instead also neutered genuine large physical
+        # drift (cross_track itself past a full lane-width) down to a
+        # GENTLE correction far too weak to arrest it -- live-tested,
+        # cross_track grew unchecked from 0.08m past 1.15m under
+        # GENTLE_RIGHT the whole time, right after a corner recovered
+        # cleanly, because the path was nominally straight there. Real
+        # measured drift needs full-strength correction regardless of
+        # whether the path is curving; only the noisy angle signal needed
+        # the cap.
+        if not path_is_turning and corridor_level in ("SPIN_LEFT", "SHARP_LEFT"):
+            corridor_level = "GENTLE_LEFT"
+        elif not path_is_turning and corridor_level in ("SPIN_RIGHT", "SHARP_RIGHT"):
+            corridor_level = "GENTLE_RIGHT"
+
         # Direct cross-track-distance escalation -- the combined
         # heading_error above dilutes a large cross-track by
         # cross_track_gain (0.35), so if the robot's yaw happens to be
@@ -940,50 +1328,158 @@ class ManualWaypointDriverNode(Node):
         # directly off distance too, tied to the real corridor width so
         # "past the green edge" and "a full lane-width past" mean something
         # concrete regardless of what the heading-based check alone says.
-        half_corridor_m = self.robot_width / 2.0
+        # (half_corridor_m computed earlier, alongside lane_ctx.)
+        # Thresholds are in terms of the robot's own BODY EDGE, not just
+        # its tracked center point -- cross_track alone reaching
+        # half_corridor_m means the center is already at the green edge,
+        # by which point the physical robot (robot_half_width wide) has
+        # already been poking out for a while. Subtracting
+        # robot_half_width makes SHARP trigger the moment the edge itself
+        # would touch the boundary, so the body stays fully inside the
+        # lane instead of only the center point.
+        body_edge_margin_m = max(0.0, half_corridor_m - self.robot_half_width)
+        # Look 50cm ahead (turn_lookahead_m) and check where THAT point
+        # sits relative to the same line cross_track uses -- if it's
+        # already meaningfully closer to center than the robot is right
+        # now, the drift is self-resolving as the path continues (a
+        # momentary wobble, not a real departure), so a gentle nudge is
+        # enough instead of snapping straight to SHARP. If the lookahead
+        # point is just as far or farther off, the drift is genuine and
+        # still gets the firm correction.
+        if seg_len > 1e-3:
+            look_cross_track = (seg_dx * (look_y - sy) - seg_dy * (look_x - sx)) / seg_len
+        else:
+            look_cross_track = cross_track
+        drift_is_converging = abs(look_cross_track) < abs(cross_track) * 0.8
         if abs(cross_track) >= self.robot_width:
             distance_level = "SPIN_RIGHT" if cross_track > 0 else "SPIN_LEFT"
-        elif abs(cross_track) >= half_corridor_m:
-            distance_level = "SHARP_RIGHT" if cross_track > 0 else "SHARP_LEFT"
+        elif abs(cross_track) >= body_edge_margin_m:
+            if drift_is_converging:
+                distance_level = "GENTLE_RIGHT" if cross_track > 0 else "GENTLE_LEFT"
+            else:
+                distance_level = "SHARP_RIGHT" if cross_track > 0 else "SHARP_LEFT"
         else:
             distance_level = "STRAIGHT"
         if rank[distance_level] > rank[corridor_level]:
             corridor_level = distance_level
+
+        # LiDAR directly confirmed "centered between two close walls"
+        # this tick (see lidar_confirmed_centered above) -- trust that
+        # over cross_track's own (AMCL-derived, can lag) verdict and go
+        # straight, instead of a noisy heading reading still forcing a
+        # correction that isn't actually needed. Narrow-corridor zigzag
+        # persisted even after side_center_margin_m alone because
+        # obstacle_level only ties with corridor_level in the merge below
+        # (rank 0 vs rank 0), not overriding a corridor_level that had
+        # already latched onto something sharper a tick earlier.
+        if lidar_confirmed_centered:
+            corridor_level = "STRAIGHT"
+
+        # Overshoot guard -- cross_track is the robot's actual measured
+        # position, ground truth for which side of the line it's really
+        # on; heading_error (the angle-based classification above) can
+        # lag behind it, especially right after a strong SPIN/SHARP turn,
+        # since the heading keeps swinging even once the body has already
+        # crossed back over center. Live-tested: SPIN_LEFT held for 6+
+        # seconds straight through cross_track crossing from -0.19m
+        # through 0 all the way to +0.37m -- heading_error alone kept
+        # calling for LEFT the whole time, never once easing off once the
+        # robot was already on, then well past, the line. If the
+        # classification's own direction now disagrees with which side
+        # cross_track says the robot is actually on, that direction would
+        # only push it further past center -- drop back to STRAIGHT
+        # instead (a fresh tick will pick up whatever real correction is
+        # still needed once heading_error itself has caught up).
+        if corridor_level.endswith("_LEFT") and cross_track > 0:
+            corridor_level = "STRAIGHT"
+        elif corridor_level.endswith("_RIGHT") and cross_track < 0:
+            corridor_level = "STRAIGHT"
 
         # --- merge: whichever demands the stronger correction wins; ties
         # go to the obstacle (safety over precision) ---
         desired_level = obstacle_level if rank[obstacle_level] >= rank[corridor_level] else corridor_level
         driven_level = self._commit_level(self._veer_commit, desired_level, rank, self.veer_commit_seconds)
 
-        if front_wall_confirmed and driven_level == "STRAIGHT":
-            self.get_logger().warn(
-                f"Obstacle ahead (front={front:.2f}m) on the way to waypoint "
-                f"{self.current_index + 1} -- pausing.",
-                throttle_duration_sec=1.0,
-            )
-            self._enter(DriveState.PAUSED_OBSTACLE)
-            return
+        # A front dodge already committed to a direction -- hold that
+        # ONE fixed heading offset until reached (or it's taken too
+        # long), instead of re-deciding fresh every tick. Re-deciding
+        # every tick kept holding SHARP for as long as the obstacle
+        # stayed in view, overshooting well past the turn actually
+        # needed ("kebablasan"). Once the target heading is reached, it
+        # falls straight back into normal driving (the corridor system
+        # then naturally straightens back onto the line).
+        if self._front_dodge_target_yaw is not None:
+            yaw_error = normalize_angle(self._front_dodge_target_yaw - yaw)
+            dodge_elapsed = time.monotonic() - self._front_dodge_started_at
+            if abs(yaw_error) <= self.turn_pivot_tolerance_rad or dodge_elapsed >= self.front_dodge_timeout_s:
+                self._front_dodge_side = None
+                self._front_dodge_target_yaw = None
+            else:
+                driven_level = self._front_dodge_side
+
+        if self._front_dodge_target_yaw is None and front_wall_confirmed and driven_level == "STRAIGHT":
+            # Before giving up and pausing, see if there's meaningfully
+            # more room on one side than the other (reusing the exact
+            # same diag_left/diag_right readings obstacle-avoidance
+            # already computed) AND that side is actually wide enough for
+            # the robot's own body to fit through -- steer that way
+            # instead. A front obstacle isn't necessarily blocking the
+            # whole corridor, and driving through unclear should mean
+            # routing around it and staying inside the green lane, not
+            # just braking and waiting. front_side_steer_margin_m
+            # requires a REAL difference between the two sides before
+            # picking one, so an ordinary narrow corridor (both sides
+            # similarly close, not a real gap) still correctly falls
+            # through to pausing instead of forcing an arbitrary swerve
+            # into a wall; front_dodge_clearance_margin_m separately
+            # requires the chosen side to actually fit the robot, not
+            # just be "less bad" than the other side.
+            min_fit_m = self.robot_half_width + self.front_dodge_clearance_margin_m
+            dodge_rad = math.radians(self.front_dodge_deg)
+            if diag_left - diag_right > self.front_side_steer_margin_m and diag_left >= min_fit_m:
+                self._front_dodge_side = "SHARP_LEFT"
+                self._front_dodge_target_yaw = normalize_angle(yaw + dodge_rad)
+                self._front_dodge_started_at = time.monotonic()
+                driven_level = "SHARP_LEFT"
+            elif diag_right - diag_left > self.front_side_steer_margin_m and diag_right >= min_fit_m:
+                self._front_dodge_side = "SHARP_RIGHT"
+                self._front_dodge_target_yaw = normalize_angle(yaw - dodge_rad)
+                self._front_dodge_started_at = time.monotonic()
+                driven_level = "SHARP_RIGHT"
+            else:
+                self.get_logger().warn(
+                    f"Obstacle ahead (front={front:.2f}m) on the way to waypoint "
+                    f"{self.current_index + 1} -- pausing.",
+                    throttle_duration_sec=1.0,
+                )
+                self._enter(DriveState.PAUSED_OBSTACLE)
+                return
 
         # robotmaganglidar1.py's 3-level convention (straight=97 both
         # sides, gentle slows the inside wheel to 107, sharp to 117) plus
-        # one level above SHARP for genuinely large deviations: SPIN
-        # reverses the inside wheel (same bytes as the initial pivot)
-        # while the outside wheel keeps driving forward -- still actively
-        # moving, never a dead stop, just a much tighter turn than SHARP
-        # (which only slows a wheel, never reverses it) can manage.
+        # one level above SHARP for genuinely large deviations: SPIN never
+        # reverses a wheel -- inner wheel at crawl (125, as close to a
+        # stop as possible without reversing) AND outer wheel sped up past
+        # normal cruise (MOTOR_FORWARD_FAST/87, see its definition) for a
+        # wider differential than crawl+cruise alone gave (confirmed too
+        # little turning authority in two live tests: 0.55m then 0.33m+
+        # overshoot on a real sharp bend).
         level_bytes = {
             "SHARP_LEFT": (MOTOR_FORWARD_VERY_SLOW, MOTOR_FORWARD),
             "GENTLE_LEFT": (MOTOR_FORWARD_SLOW, MOTOR_FORWARD),
             "SHARP_RIGHT": (MOTOR_FORWARD, MOTOR_FORWARD_VERY_SLOW),
             "GENTLE_RIGHT": (MOTOR_FORWARD, MOTOR_FORWARD_SLOW),
-            "SPIN_LEFT": SPIN_LEFT,
-            "SPIN_RIGHT": SPIN_RIGHT,
+            "SPIN_LEFT": DRIVE_SPIN_LEFT,
+            "SPIN_RIGHT": DRIVE_SPIN_RIGHT,
         }
         kiri, kanan = level_bytes.get(driven_level, (MOTOR_FORWARD, MOTOR_FORWARD))
         self.get_logger().info(
             f"{driven_level.replace('_', ' ')} (obstacle={obstacle_level}, corridor={corridor_level}, "
             f"cross_track={cross_track:.2f}m) -> kiri={kiri} kanan={kanan}",
-            throttle_duration_sec=1.0,
+            # TEMPORARY diagnostic: no throttle (was 1.0s) -- need every
+            # real 0.1s tick logged to see what's actually happening
+            # moment-to-moment through a bend, not a once-a-second sample
+            # that can make 10 real ticks look like one sudden jump.
         )
         self._publish_motor(kiri, kanan)
 

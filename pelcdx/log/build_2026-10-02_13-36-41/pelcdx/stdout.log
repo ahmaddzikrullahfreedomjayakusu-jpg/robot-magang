@@ -1,0 +1,40 @@
+running egg_info
+creating build/pelcdx/pelcdx.egg-info
+writing build/pelcdx/pelcdx.egg-info/PKG-INFO
+writing dependency_links to build/pelcdx/pelcdx.egg-info/dependency_links.txt
+writing entry points to build/pelcdx/pelcdx.egg-info/entry_points.txt
+writing requirements to build/pelcdx/pelcdx.egg-info/requires.txt
+writing top-level names to build/pelcdx/pelcdx.egg-info/top_level.txt
+writing manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+reading manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+writing manifest file 'build/pelcdx/pelcdx.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build
+creating /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build/lib
+creating /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build/lib/pelcdx
+copying pelcdx/__init__.py -> /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build/lib/pelcdx
+copying pelcdx/manual_waypoint_driver_node.py -> /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build/lib/pelcdx
+running install
+running install_lib
+creating /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx
+copying /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build/lib/pelcdx/__init__.py -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx
+copying /home/lattepanda/Robot magang/pelcdx/build/pelcdx/build/lib/pelcdx/manual_waypoint_driver_node.py -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx
+byte-compiling /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx/__init__.py to __init__.cpython-312.pyc
+byte-compiling /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx/manual_waypoint_driver_node.py to manual_waypoint_driver_node.cpython-312.pyc
+running install_data
+creating /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/ament_index
+creating /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/ament_index/resource_index
+creating /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/ament_index/resource_index/packages
+copying resource/pelcdx -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/ament_index/resource_index/packages
+copying package.xml -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/pelcdx
+creating /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/pelcdx/config
+copying config/saved_waypoints.yaml -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/pelcdx/config
+copying config/manual_waypoints_params.yaml -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/pelcdx/config
+creating /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/pelcdx/launch
+copying launch/manual_waypoints_launch.py -> /home/lattepanda/Robot magang/pelcdx/install/pelcdx/share/pelcdx/launch
+running install_egg_info
+Copying build/pelcdx/pelcdx.egg-info to /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/python3.12/site-packages/pelcdx-0.1.0-py3.12.egg-info
+running install_scripts
+Installing manual_waypoint_driver_node script to /home/lattepanda/Robot magang/pelcdx/install/pelcdx/lib/pelcdx
+writing list of installed files to '/home/lattepanda/Robot magang/pelcdx/build/pelcdx/install.log'

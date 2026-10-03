@@ -29,3 +29,6 @@ Robot mulai jalan sendiri. Pantau (opsional):
 ros2 topic echo /coverage/status
 ros2 topic echo /coverage/percent
 Ctrl+C di Terminal 1 buat berhenti kapan saja
+
+
+chace	
